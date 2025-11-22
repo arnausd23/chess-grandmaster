@@ -61,26 +61,32 @@ export default function GrandmasterCard({
   const getRankDisplay = (rank: number) => {
     if (rank === 1) {
       return (
-        <div className="flex items-center gap-1 text-yellow-600">
-          <span className="text-lg">🏆</span>
-          <span className="text-2xl font-bold">1</span>
-          <span className="text-lg">🏆</span>
+        <div className="flex items-center text-yellow-600">
+          <img 
+            src="/assets/images/first.png" 
+            alt="First place" 
+            className="h-9 w-auto object-contain"
+          />
         </div>
       );
     } else if (rank === 2) {
       return (
-        <div className="flex items-center gap-1 text-gray-400">
-          <span className="text-lg">🥈</span>
-          <span className="text-2xl font-bold">2</span>
-          <span className="text-lg">🥈</span>
+        <div className="flex items-center text-gray-400">
+          <img 
+            src="/assets/images/second.png" 
+            alt="Second place" 
+            className="h-9 w-auto object-contain"
+          />
         </div>
       );
     } else if (rank === 3) {
       return (
-        <div className="flex items-center gap-1 text-amber-600">
-          <span className="text-lg">🥉</span>
-          <span className="text-2xl font-bold">3</span>
-          <span className="text-lg">🥉</span>
+        <div className="flex items-center text-amber-600">
+          <img 
+            src="/assets/images/third.png" 
+            alt="Third place" 
+            className="h-9 w-auto object-contain"
+          />
         </div>
       );
     }
@@ -93,7 +99,7 @@ export default function GrandmasterCard({
       <div
         ref={ref}
         onClick={handleClick}
-        className="bg-white rounded-lg shadow-md w-full p-6 mb-4 cursor-pointer hover:shadow-lg transition-shadow flex items-center gap-6"
+        className="bg-white rounded-lg shadow-md w-full p-6 mb-4 cursor-pointer hover:shadow-xl hover:bg-gray-100 hover:-translate-y-1 transition-all duration-300 border-2 border-transparent hover:border-gray-200 flex items-center gap-6"
       >
 
         <div className="flex-shrink-0">

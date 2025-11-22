@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePlayerProfile } from '../../hooks/usePlayerProfile';
 import { useLastOnline } from '../../hooks/useLastOnline';
+import { useCountry } from '../../hooks/useCountry';
 import { BLANK_IMAGE, handleImageError } from '../../utils/imageUtils';
 import { SkeletonProfile } from '../Skeleton';
 
@@ -9,6 +10,7 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const { data: profile, isLoading, error } = usePlayerProfile(username || '');
   const lastOnlineTime = useLastOnline(profile?.last_online || 0);
+  const { data: countryData } = useCountry(profile?.country, !!profile?.country);
 
   if (isLoading) {
     return <SkeletonProfile />;
@@ -72,6 +74,13 @@ export default function ProfilePage() {
                 <div>
                   <span className="font-semibold text-gray-700">Location: </span>
                   <span className="text-gray-600">{profile.location}</span>
+                </div>
+              )}
+
+              {countryData?.name && (
+                <div>
+                  <span className="font-semibold text-gray-700">Country: </span>
+                  <span className="text-gray-600">{countryData.name}</span>
                 </div>
               )}
 

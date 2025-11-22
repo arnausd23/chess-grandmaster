@@ -29,5 +29,4 @@ On the profile page for a grandmaster that you created in step 2, add a clock th
 
 ## Decisions
 - I decided to go with a infite scroll instead of a list since the API doesnt support pagination, so we cannot use query params to have state and load specific record ranges, and that UI looks better than a table.
-- I didn't add any E2E or any UI testing since I only tested the logic of hooks and API related files.
 - I decided to implement a retry mechanism to prevent too many request responses and refetch information, which might be an overkill for this excercise but it would be nice to have in a real world environment. I deployed it in a branch called `with-retry`.

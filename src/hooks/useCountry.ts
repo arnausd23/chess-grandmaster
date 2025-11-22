@@ -1,6 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { requestQueue } from '../utils/requestQueue';
-import { retryWithBackoff } from '../utils/retryWithBackoff';
 
 interface CountryData {
   name: string;
@@ -9,17 +7,7 @@ interface CountryData {
 }
 
 async function fetchCountry(countryUrl: string): Promise<CountryData> {
-  const response = await requestQueue.add(() =>
-    retryWithBackoff(
-      () => fetch(countryUrl),
-      {
-        maxRetries: 3,
-        initialDelayMs: 1000,
-        maxDelayMs: 10000,
-        backoffMultiplier: 2,
-      }
-    )
-  );
+  const response = await fetch(countryUrl);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch country data: ${response.statusText}`);

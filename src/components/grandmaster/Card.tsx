@@ -99,7 +99,7 @@ export default function GrandmasterCard({
       <div
         ref={ref}
         onClick={handleClick}
-        className="bg-white rounded-lg shadow-md w-full p-6 mb-4 cursor-pointer hover:shadow-xl hover:bg-gray-100 hover:-translate-y-1 transition-all duration-300 border-2 border-transparent hover:border-gray-200 flex items-center gap-6"
+        className="bg-white rounded-lg shadow-md w-full p-6 mb-4 cursor-pointer hover:shadow-xl hover:bg-gray-100 hover:-translate-y-1 transition-all duration-300 border-2 border-transparent hover:border-gray-200 flex flex-col md:flex-row items-center gap-6"
       >
 
         <div className="flex-shrink-0">

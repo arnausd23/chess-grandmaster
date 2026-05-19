@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>RPG Game — Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0d0d1a; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow: hidden; }
+    #controls {
+      position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
+      background: #000000cc; color: #aaaaaa; font: 11px monospace;
+      padding: 4px 12px; border-radius: 4px; border: 1px solid #333; z-index: 99;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+<div id="controls">WASD / ↑↓←→ mover &nbsp;|&nbsp; Space interactuar / avanzar diálogo</div>
+<script>
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+const TILE = 32;
+const COLS = 20;
+const ROWS = 15;
+const W = COLS * TILE; // 640
+const H = ROWS * TILE; // 480
+const MOVE_MS = 180;
+
+// ─── MAP (1=suelo, 2=pared) ───────────────────────────────────────────────────
+const MAP = [
+  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,1,1,2,2,1,1,1,1,1,1,1,1,1,2,2,1,1,1,2],
+  [2,1,1,2,2,1,1,1,1,1,1,1,1,1,2,2,1,1,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,1,1,2,2,1,1,1,1,1,1,1,1,1,2,2,1,1,1,2],
+  [2,1,1,2,2,1,1,1,1,1,1,1,1,1,2,2,1,1,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+];
+const COLLISION = MAP.map(r => r.map(c => c === 2));
+
+// ─── MOVES ───────────────────────────────────────────────────────────────────
+const PLAYER_MOVES = [
+  { name: 'Ataque Normal', power: 40, type: 'physical', heal: 0 },
+  { name: 'Golpe Fuerte',  power: 80, type: 'physical', heal: 0 },
+  { name: 'Magia Básica',  power: 50, type: 'magic',    heal: 0 },
+  { name: 'Curación',      power: 0,  type: 'status',   heal: 0.30 },
+];
+const ENEMY_MOVES = [
+  { name: 'Zarpazo',   power: 35, type: 'physical', heal: 0 },
+  { name: 'Embestida', power: 55, type: 'physical', heal: 0 },
+];
+
+// ─── NPC DATA ─────────────────────────────────────────────────────────────────
+const NPC = {
+  id: 'goblin_guard', name: 'Goblin Guardia',
+  tileX: 10, tileY: 7,
+  dialog: ['¡Alto ahí, viajero!', 'Nadie pasa sin enfrentarse a mí.', '¡Prepárate para el combate!'],
+  dialogDefeated: ['Ya me has derrotado... sigue tu camino.'],
+  stats: { name: 'Goblin Guardia', hp: 80, maxHp: 80, attack: 8, defense: 6, speed: 8, moves: ENEMY_MOVES },
+};
+
+// ─── GLOBAL STATE ─────────────────────────────────────────────────────────────
+const GS = {
+  player: { name: 'Héroe', hp: 100, maxHp: 100, attack: 10, defense: 8, speed: 12, moves: PLAYER_MOVES },
+  pos:    { tx: 2, ty: 2 },
+  npcResult: 'none',         // 'none' | 'player_won' | 'player_lost'
+};
+
+// ─── BOOT SCENE ───────────────────────────────────────────────────────────────
+class BootScene extends Phaser.Scene {
+  constructor() { super('BootScene'); }
+
+  create() {
+    const mkTex = (key, w2, h2, fn) => {
+      const g = this.make.graphics({ add: false });
+      fn(g); g.generateTexture(key, w2, h2); g.destroy();
+    };
+
+    mkTex('tile_ground', TILE, TILE, g => {
+      g.fillStyle(0x3a7d44); g.fillRect(0,0,TILE,TILE);
+      g.lineStyle(1, 0x2d6035, 0.35); g.strokeRect(0,0,TILE,TILE);
+    });
+    mkTex('tile_wall', TILE, TILE, g => {
+      g.fillStyle(0x5a3e1b); g.fillRect(0,0,TILE,TILE);
+      g.fillStyle(0x3a2510); g.fillRect(3,3,TILE-6,TILE-6);
+      g.fillStyle(0x6b4e22); g.fillRect(6,6,TILE-12,TILE-12);
+    });
+    mkTex('player', 16, 32, g => {
+      g.fillStyle(0x3366cc); g.fillRect(0,0,16,32);
+      g.fillStyle(0x88aaff); g.fillRect(3,3,10,10);    // head
+      g.fillStyle(0x2255bb); g.fillRect(2,14,5,12);    // left leg
+      g.fillStyle(0x2255bb); g.fillRect(9,14,5,12);    // right leg
+      g.fillStyle(0xddbb88); g.fillRect(4,4,8,8);      // face
+    });
+    mkTex('npc', 16, 32, g => {
+      g.fillStyle(0xcc3322); g.fillRect(0,0,16,32);
+      g.fillStyle(0xee7755); g.fillRect(3,3,10,10);
+      g.fillStyle(0xaa2211); g.fillRect(2,14,5,12);
+      g.fillStyle(0xaa2211); g.fillRect(9,14,5,12);
+      g.fillStyle(0x88cc44); g.fillRect(4,4,8,8);      // goblin face
+    });
+    mkTex('enemy_b', 96, 96, g => {
+      g.fillStyle(0xcc3322); g.fillRect(16,32,64,56);  // body
+      g.fillStyle(0xee7755); g.fillRect(24,4,48,36);   // head
+      g.fillStyle(0x88cc44); g.fillRect(30,12,36,22);  // face
+      g.fillStyle(0xffff00); g.fillCircle(38,20,4);    // eye L
+      g.fillStyle(0xffff00); g.fillCircle(58,20,4);    // eye R
+      g.fillStyle(0xcc3322); g.fillRect(14,72,22,24);  // leg L
+      g.fillStyle(0xcc3322); g.fillRect(60,72,22,24);  // leg R
+      g.fillStyle(0xaa2200); g.fillRect(4,38,16,32);   // arm L
+      g.fillStyle(0xaa2200); g.fillRect(76,38,16,32);  // arm R
+    });
+    mkTex('player_b', 96, 96, g => {
+      g.fillStyle(0x3366cc); g.fillRect(16,32,64,56);
+      g.fillStyle(0x88aaff); g.fillRect(24,4,48,36);
+      g.fillStyle(0xddbb88); g.fillRect(30,10,36,24);
+      g.fillStyle(0x222222); g.fillCircle(40,20,4);
+      g.fillStyle(0x222222); g.fillCircle(56,20,4);
+      g.fillStyle(0x2255bb); g.fillRect(14,72,22,24);
+      g.fillStyle(0x2255bb); g.fillRect(60,72,22,24);
+      g.fillStyle(0x2244aa); g.fillRect(4,38,16,32);
+      g.fillStyle(0x2244aa); g.fillRect(76,38,16,32);
+    });
+
+    this.scene.start('OverworldScene');
+  }
+}
+
+// ─── OVERWORLD SCENE ──────────────────────────────────────────────────────────
+class OverworldScene extends Phaser.Scene {
+  constructor() { super('OverworldScene'); }
+
+  init(data) { this._incoming = data || {}; }
+
+  create() {
+    // Tiles
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        this.add.image(c*TILE+TILE/2, r*TILE+TILE/2, MAP[r][c]===2 ? 'tile_wall' : 'tile_ground');
+
+    // NPC sprite
+    this._npcSpr = this.add.image(NPC.tileX*TILE+TILE/2, NPC.tileY*TILE, 'npc').setOrigin(0.5,0).setDepth(2);
+
+    // NPC result label (persistent)
+    this._npcLabel = null;
+    if (GS.npcResult !== 'none') this._drawNpcLabel(GS.npcResult);
+
+    // Interact hint
+    this._hint = this.add.text(NPC.tileX*TILE+TILE/2, NPC.tileY*TILE-18, '[Space]', {
+      fontSize:'10px', color:'#fff', backgroundColor:'#000a', padding:{x:3,y:2}
+    }).setOrigin(0.5,1).setDepth(5).setVisible(false);
+    this.tweens.add({ targets:this._hint, alpha:{from:1,to:0.2}, duration:500, yoyo:true, repeat:-1 });
+
+    // Player sprite
+    this._px = GS.pos.tx;
+    this._py = GS.pos.ty;
+    this._dir = 'down';
+    this._moving = false;
+    this._spr = this.add.image(this._px*TILE+TILE/2, this._py*TILE, 'player').setOrigin(0.5,0).setDepth(3);
+
+    // Dialog
+    this._dialogActive = false;
+    this._lines = [];
+    this._lineIdx = 0;
+    this._shown = false;
+    this._twEvent = null;
+    this._buildDialog();
+
+    // Input
+    this._cur = this.input.keyboard.createCursorKeys();
+    this._wasd = {
+      up:    this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
+      down:  this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
+      left:  this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
+      right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
+    };
+    this._space = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+    // Apply incoming battle result
+    if (this._incoming.result) {
+      GS.npcResult = this._incoming.result;
+      if (GS.npcResult === 'player_lost') GS.player.hp = GS.player.maxHp;
+      this._drawNpcLabel(GS.npcResult);
+      // Victory flash
+      const msg = GS.npcResult === 'player_won' ? '¡Enemigo derrotado!' : '¡Fuiste derrotado!';
+      const color = GS.npcResult === 'player_won' ? '#4ade80' : '#f87171';
+      const flash = this.add.text(W/2, H/2-20, msg, {
+        fontSize:'20px', color, fontStyle:'bold', backgroundColor:'#000000cc', padding:{x:12,y:8}
+      }).setOrigin(0.5).setDepth(20);
+      this.tweens.add({ targets:flash, alpha:0, duration:2000, delay:1500, onComplete:()=>flash.destroy() });
+    }
+
+    this.cameras.main.fadeIn(350);
+  }
+
+  _drawNpcLabel(result) {
+    if (this._npcLabel) this._npcLabel.destroy();
+    const txt   = result === 'player_won' ? '¡Derrotado!' : '¡Ganaste!';
+    const color = result === 'player_won' ? '#4ade80'     : '#f87171';
+    this._npcLabel = this.add.text(NPC.tileX*TILE+TILE/2, NPC.tileY*TILE-30, txt, {
+      fontSize:'11px', color, fontStyle:'bold', backgroundColor:'#000000cc', padding:{x:4,y:2}
+    }).setOrigin(0.5,1).setDepth(6);
+  }
+
+  _buildDialog() {
+    const bW = W-20, bH = 82, bX = 10, bY = H-bH-6;
+    this._dlgBox = this.add.container(bX, bY).setDepth(10).setVisible(false);
+    const bg = this.add.rectangle(0,0,bW,bH,0x000000,0.9).setOrigin(0);
+    const br = this.add.rectangle(0,0,bW,bH,0x000000,0).setOrigin(0).setStrokeStyle(2,0xffffff,0.7);
+    this._dlgTxt = this.add.text(12,12,'',{fontSize:'13px',color:'#ffffff',wordWrap:{width:bW-24}});
+    const hint = this.add.text(bW-10,bH-10,'▶ Space',{fontSize:'10px',color:'#888'}).setOrigin(1,1);
+    this._dlgBox.add([bg,br,this._dlgTxt,hint]);
+  }
+
+  update() {
+    if (this._dialogActive) {
+      if (Phaser.Input.Keyboard.JustDown(this._space)) this._advDlg();
+      return;
+    }
+    this._move();
+    this._checkNpc();
+  }
+
+  _move() {
+    if (this._moving) return;
+    const K = Phaser.Input.Keyboard;
+    let dx=0, dy=0;
+    if      (K.JustDown(this._cur.up)    || K.JustDown(this._wasd.up))    { dy=-1; this._dir='up'; }
+    else if (K.JustDown(this._cur.down)  || K.JustDown(this._wasd.down))  { dy= 1; this._dir='down'; }
+    else if (K.JustDown(this._cur.left)  || K.JustDown(this._wasd.left))  { dx=-1; this._dir='left'; }
+    else if (K.JustDown(this._cur.right) || K.JustDown(this._wasd.right)) { dx= 1; this._dir='right'; }
+    if (!dx && !dy) return;
+
+    const nx=this._px+dx, ny=this._py+dy;
+    if (ny<0||ny>=ROWS||nx<0||nx>=COLS||COLLISION[ny][nx]) return;
+    if (nx===NPC.tileX && ny===NPC.tileY) return;
+
+    this._px=nx; this._py=ny;
+    GS.pos.tx=nx; GS.pos.ty=ny;
+    this._moving=true;
+    this.tweens.add({
+      targets: this._spr, x:nx*TILE+TILE/2, y:ny*TILE,
+      duration: MOVE_MS, ease:'Linear',
+      onComplete: ()=>{ this._moving=false; }
+    });
+  }
+
+  _checkNpc() {
+    const d=this._dir, px=this._px, py=this._py, nx=NPC.tileX, ny=NPC.tileY;
+    const adj = (d==='up'&&px===nx&&py-1===ny)||(d==='down'&&px===nx&&py+1===ny)||
+                (d==='left'&&py===ny&&px-1===nx)||(d==='right'&&py===ny&&px+1===nx);
+    this._hint.setVisible(adj);
+    if (adj && Phaser.Input.Keyboard.JustDown(this._space)) this._startDlg();
+  }
+
+  _startDlg() {
+    this._lines = GS.npcResult==='player_won' ? NPC.dialogDefeated : NPC.dialog;
+    this._lineIdx=0; this._dialogActive=true;
+    this._dlgBox.setVisible(true);
+    this._showLine(this._lines[0]);
+  }
+
+  _showLine(line) {
+    this._shown=false; this._dlgTxt.setText(''); let i=0;
+    if (this._twEvent) this._twEvent.remove(false);
+    this._twEvent = this.time.addEvent({
+      delay:30, repeat:line.length-1,
+      callback:()=>{ this._dlgTxt.setText(line.slice(0,++i)); if(i>=line.length)this._shown=true; }
+    });
+  }
+
+  _advDlg() {
+    if (!this._shown) {
+      if (this._twEvent) this._twEvent.remove(false);
+      this._dlgTxt.setText(this._lines[this._lineIdx]);
+      this._shown=true; return;
+    }
+    this._lineIdx++;
+    if (this._lineIdx < this._lines.length) { this._showLine(this._lines[this._lineIdx]); return; }
+    this._dlgBox.setVisible(false); this._dialogActive=false;
+    if (GS.npcResult !== 'player_won') this._goBattle();
+  }
+
+  _goBattle() {
+    this.cameras.main.fade(400,0,0,0,false,(_,p)=>{
+      if (p===1) this.scene.start('BattleScene',{
+        player: {...GS.player},
+        enemy:  {...NPC.stats},
+      });
+    });
+  }
+}
+
+// ─── BATTLE SCENE ─────────────────────────────────────────────────────────────
+class BattleScene extends Phaser.Scene {
+  constructor() { super('BattleScene'); }
+
+  init(data) {
+    this.pl = data.player;
+    this.en = data.enemy;
+    this.phase = 'INTRO';
+  }
+
+  create() {
+    // Background
+    const grd = this.add.graphics();
+    grd.fillGradientStyle(0x0d0d2a, 0x0d0d2a, 0x1a0a0a, 0x1a0a0a, 1);
+    grd.fillRect(0,0,W,H);
+    // Ground band
+    this.add.rectangle(0, H*0.62, W, H*0.38, 0x1a1206).setOrigin(0);
+    this.add.line(W/2,0, 0,H*0.62, W,H*0.62, 0x55441a, 0.6).setOrigin(0.5);
+
+    // Sprites
+    this._enSpr = this.add.image(W*0.70, H*0.27, 'enemy_b').setOrigin(0.5).setScale(1.1);
+    this._plSpr = this.add.image(W*0.22, H*0.55, 'player_b').setOrigin(0.5).setScale(1.1);
+
+    // HP panels
+    this._buildPanel(8, 8, this.en, false);
+    this._buildPanel(W-214, H*0.40, this.pl, true);
+
+    // Battle log
+    this.add.rectangle(8,H-104,W-16,56,0x000000,0.88).setOrigin(0);
+    this.add.rectangle(8,H-104,W-16,56,0x000000,0).setOrigin(0).setStrokeStyle(1,0x444444);
+    this._log = this.add.text(16,H-96,'',{fontSize:'13px',color:'#fff',wordWrap:{width:W-32}});
+
+    // Move buttons
+    this._buildButtons();
+    this._btnsEnabled(false);
+
+    this.cameras.main.fadeIn(400);
+    this._log.setText(`¡${this.en.name} quiere combatir!`);
+    this.time.delayedCall(1200,()=>{ this.phase='PLAYER_TURN'; this._btnsEnabled(true); });
+  }
+
+  _buildPanel(x, y, c, isPlayer) {
+    const pW=206, pH=60;
+    this.add.rectangle(x,y,pW,pH,0x000000,0.85).setOrigin(0);
+    this.add.rectangle(x,y,pW,pH,0x000000,0).setOrigin(0).setStrokeStyle(1,0xffffff,0.35);
+    this.add.text(x+8,y+6,c.name,{fontSize:'12px',color:'#ffee88',fontStyle:'bold'});
+    this.add.text(x+8,y+22,'HP',{fontSize:'10px',color:'#888'});
+    this.add.rectangle(x+28,y+28,162,9,0x333333).setOrigin(0,0.5);
+    const bar  = this.add.graphics();
+    const txt  = this.add.text(x+8,y+38,'',{fontSize:'9px',color:'#888'});
+    this._fillBar(bar,x+28,y+28,162,c);
+    txt.setText(`${c.hp}/${c.maxHp}`);
+    if (isPlayer){ this._plBar=bar; this._plTxt=txt; this._plBX=x+28; this._plBY=y+28; }
+    else          { this._enBar=bar; this._enTxt=txt; this._enBX=x+28; this._enBY=y+28; }
+  }
+
+  _fillBar(bar,x,y,mW,c){
+    const r=Math.max(0,c.hp/c.maxHp);
+    bar.clear();
+    bar.fillStyle(r>0.5?0x4ade80:r>0.25?0xfacc15:0xf87171);
+    bar.fillRect(x,y-4,Math.round(mW*r),8);
+  }
+
+  _refreshUI(){
+    this._fillBar(this._plBar,this._plBX,this._plBY,162,this.pl);
+    this._fillBar(this._enBar,this._enBX,this._enBY,162,this.en);
+    this._plTxt.setText(`${this.pl.hp}/${this.pl.maxHp}`);
+    this._enTxt.setText(`${this.en.hp}/${this.en.maxHp}`);
+  }
+
+  _buildButtons(){
+    // Layout: 4 moves + Huir, evenly spaced
+    const totalBtns = this.pl.moves.length + 1;
+    const gap=4, areaW=W-16, btnH=32;
+    const btnW=Math.floor((areaW - gap*(totalBtns-1)) / totalBtns);
+    const startY=H-40;
+    this._btns=[];
+
+    [...this.pl.moves, {name:'Huir',power:0,type:'flee',heal:0}].forEach((move,i)=>{
+      const bx=8+i*(btnW+gap), by=startY;
+      const isHeal = move.type==='status';
+      const isFlee = move.type==='flee';
+      const fillN = isFlee?0x5f1e1e : isHeal?0x1e5f3a : 0x1e3a5f;
+      const fillH = isFlee?0x8e2d2d : isHeal?0x2d8e5a : 0x2d5a8e;
+      const stroke= isFlee?0xd94a4a : isHeal?0x4ade80 : 0x4a90d9;
+      const bg=this.add.rectangle(bx,by,btnW,btnH,fillN).setOrigin(0).setStrokeStyle(1,stroke).setInteractive({useHandCursor:true});
+      const lbl=this.add.text(bx+6,by+9,move.name,{fontSize:'11px',color:'#ffffff'});
+      bg.on('pointerover',()=>bg.setFillStyle(fillH));
+      bg.on('pointerout', ()=>bg.setFillStyle(fillN));
+      bg.on('pointerdown',()=>{ isFlee?this._flee():this._playerMove(move); });
+      this._btns.push(bg);
+    });
+  }
+
+  _btnsEnabled(on){
+    this._btns.forEach(b=>{
+      b.setAlpha(on?1:0.45);
+      if(on) b.setInteractive({useHandCursor:true});
+      else   b.disableInteractive();
+    });
+  }
+
+  _playerMove(move){
+    if(this.phase!=='PLAYER_TURN')return;
+    this.phase='ANIMATING'; this._btnsEnabled(false);
+    const first=this.pl.speed>=this.en.speed;
+    if(first){
+      this._doMove(this.pl,this.en,move,'pl',()=>{
+        if(this.en.hp<=0){this._end('player_won');return;}
+        this._enemyTurn(()=>{
+          if(this.pl.hp<=0){this._end('player_lost');return;}
+          this.phase='PLAYER_TURN'; this._btnsEnabled(true);
+        });
+      });
+    } else {
+      this._enemyTurn(()=>{
+        if(this.pl.hp<=0){this._end('player_lost');return;}
+        this._doMove(this.pl,this.en,move,'pl',()=>{
+          if(this.en.hp<=0){this._end('player_won');return;}
+          this.phase='PLAYER_TURN'; this._btnsEnabled(true);
+        });
+      });
+    }
+  }
+
+  _enemyTurn(cb){
+    const mv=Phaser.Utils.Array.GetRandom(this.en.moves);
+    this._doMove(this.en,this.pl,mv,'en',cb);
+  }
+
+  _doMove(att,def,mv,side,cb){
+    if(mv.type==='status'&&mv.heal>0){
+      const h=Math.round(att.maxHp*mv.heal);
+      att.hp=Math.min(att.maxHp,att.hp+h);
+      this._log.setText(`${att.name} usa ${mv.name} y recupera ${h} HP.`);
+      this._refreshUI();
+      this.time.delayedCall(950,cb); return;
+    }
+    const dmg=Math.max(1,Math.round((att.attack*mv.power/Math.max(1,def.defense))*(0.85+Math.random()*0.15)));
+    def.hp=Math.max(0,def.hp-dmg);
+    this._log.setText(`${att.name} usa ${mv.name}. Causó ${dmg} de daño.`);
+    this._shake(side==='pl'?this._enSpr:this._plSpr);
+    this._refreshUI();
+    this.time.delayedCall(950,cb);
+  }
+
+  _flee(){
+    if(this.phase!=='PLAYER_TURN')return;
+    this.phase='ANIMATING'; this._btnsEnabled(false);
+    const ch=Math.min(0.9,Math.max(0.1,0.5+(this.pl.speed-this.en.speed)*0.05));
+    if(Math.random()<ch){
+      this._log.setText('¡Huiste con éxito!');
+      this.time.delayedCall(1000,()=>this._back(null));
+    } else {
+      this._log.setText('¡No pudiste huir!');
+      this.time.delayedCall(950,()=>{
+        this._enemyTurn(()=>{
+          if(this.pl.hp<=0){this._end('player_lost');return;}
+          this.phase='PLAYER_TURN'; this._btnsEnabled(true);
+        });
+      });
+    }
+  }
+
+  _end(result){
+    this.phase='GAME_OVER';
+    this._log.setText(result==='player_won'?'¡Has ganado el combate!':'¡Has sido derrotado...');
+    const loser=result==='player_won'?this._enSpr:this._plSpr;
+    this.tweens.add({targets:loser,alpha:0,duration:600,delay:200});
+    this.time.delayedCall(2400,()=>this._back(result));
+  }
+
+  _back(result){
+    this.cameras.main.fade(400,0,0,0,false,(_,p)=>{
+      if(p===1) this.scene.start('OverworldScene',{ result });
+    });
+  }
+
+  _shake(spr){
+    const ox=spr.x;
+    this.tweens.add({targets:spr,x:{from:ox-7,to:ox+7},duration:45,yoyo:true,repeat:3,onComplete:()=>{spr.x=ox;}});
+    this.tweens.add({targets:spr,alpha:{from:1,to:0.15},duration:70,yoyo:true,repeat:2});
+  }
+}
+
+// ─── LAUNCH ───────────────────────────────────────────────────────────────────
+new Phaser.Game({
+  type: Phaser.AUTO,
+  width: W, height: H,
+  backgroundColor: '#1a1a2e',
+  pixelArt: true,
+  roundPixels: true,
+  scene: [BootScene, OverworldScene, BattleScene],
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  render: { antialias: false },
+});
+</script>
+</body>
+</html>

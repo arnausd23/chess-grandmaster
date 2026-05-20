@@ -4,6 +4,7 @@ class GameScene extends Phaser.Scene {
     init(data) {
         this.floor = data.floor || 1;
         this.savedParty = data.savedParty || null;
+        this.selectedMove = data.selectedMove ?? 0;
     }
 
     // ─────────────────────────────────── CREATE ───────────────────────────────────
@@ -40,6 +41,12 @@ class GameScene extends Phaser.Scene {
             wait:   Phaser.Input.Keyboard.KeyCodes.SPACE,
             attack: Phaser.Input.Keyboard.KeyCodes.Z,
         });
+        this.moveSelectKeys = [
+            this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
+            this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
+            this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE),
+            this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR),
+        ];
 
         this.state = 'WAITING';
         this.moveTimer = 0;
@@ -73,7 +80,19 @@ class GameScene extends Phaser.Scene {
             this.moveTimer = time + CFG.MOVE_DELAY;
             this._doAttack();
             return;
-        } else return;
+        } else {
+            for (let i = 0; i < 4; i++) {
+                if (Phaser.Input.Keyboard.JustDown(this.moveSelectKeys[i])) {
+                    const leader = this.party[0];
+                    if (leader?.moveKeys && i < leader.moveKeys.length) {
+                        this.selectedMove = i;
+                        this._uiUpdate();
+                    }
+                    return;
+                }
+            }
+            return;
+        }
 
         this.moveTimer = time + CFG.MOVE_DELAY;
         this._tryMoveLeader(dx, dy);
@@ -137,19 +156,85 @@ class GameScene extends Phaser.Scene {
         this._processTurn(prev);
     }
 
-    // Z key: attack in current facing direction without moving
     _doAttack() {
         const leader = this.party[0];
-        const nx = leader.gx + leader.facingDx;
-        const ny = leader.gy + leader.facingDy;
+        const moveKey = leader.moveKeys?.[this.selectedMove];
+        const moveDef = moveKey ? MOVES[moveKey] : null;
 
-        const occ = this._inBounds(nx, ny) ? this.occupied.get(`${nx},${ny}`) : null;
-        if (occ && occ.isEnemy) {
-            this._combat(leader, occ);
+        if (!moveDef) { this._processTurn(null); return; }
+
+        if (leader.pp[this.selectedMove] <= 0) {
+            this._log(`¡${moveDef.name} no tiene PP!`);
+            return;
+        }
+
+        leader.pp[this.selectedMove]--;
+
+        if (moveDef.range === 'self') {
+            this._applySelfMove(leader, moveDef);
+            this._processTurn(null);
+            return;
+        }
+
+        const targets = this._getMoveTargets(leader, moveDef);
+        if (targets.length === 0) {
+            this._log(`${leader.name} usó ${moveDef.name}… ¡pero no había nadie!`);
         } else {
-            this._log(`${leader.name} atacó al viento…`);
+            for (const t of targets) this._combatWithMove(leader, t, moveDef);
         }
         this._processTurn(null);
+    }
+
+    _applySelfMove(entity, moveDef) {
+        if (moveDef.effect === 'atk_up') {
+            entity.atk += 8;
+            this._log(`¡${entity.name} usó ${moveDef.name}! ¡Su Ataque subió!`);
+        } else if (moveDef.effect === 'def_up') {
+            entity.def += 8;
+            this._log(`¡${entity.name} usó ${moveDef.name}! ¡Su Defensa subió!`);
+        } else {
+            this._log(`¡${entity.name} usó ${moveDef.name}!`);
+        }
+    }
+
+    _getMoveTargets(entity, moveDef) {
+        const targets = [];
+        const { gx, gy, facingDx, facingDy } = entity;
+        if (moveDef.range === 'single') {
+            const occ = this._inBounds(gx + facingDx, gy + facingDy)
+                ? this.occupied.get(`${gx + facingDx},${gy + facingDy}`) : null;
+            if (occ && occ.isEnemy && occ.alive) targets.push(occ);
+        } else if (moveDef.range === 'wide') {
+            const arc = facingDx !== 0
+                ? [[facingDx, -1], [facingDx, 0], [facingDx, 1]]
+                : [[-1, facingDy], [0, facingDy], [1, facingDy]];
+            for (const [dx, dy] of arc) {
+                const occ = this._inBounds(gx + dx, gy + dy)
+                    ? this.occupied.get(`${gx + dx},${gy + dy}`) : null;
+                if (occ && occ.isEnemy && occ.alive) targets.push(occ);
+            }
+        } else if (moveDef.range === 'room') {
+            for (const e of this.enemies) {
+                if (e.alive && this.visible[e.gy]?.[e.gx]) targets.push(e);
+            }
+        }
+        return targets;
+    }
+
+    _combatWithMove(atk, def, moveDef) {
+        if (moveDef.power === 0) {
+            if (moveDef.effect === 'sleep') {
+                def.sleep = 3;
+                this._log(`¡${def.name} se quedó dormido!`);
+            }
+            return;
+        }
+        const dmg = Math.max(1, Math.floor(atk.atk * moveDef.power / 100) - Math.floor(def.def / 3) + Phaser.Math.Between(-2, 3));
+        def.hp = Math.max(0, def.hp - dmg);
+        this._log(`${atk.name} → ${def.name} [${moveDef.name}]: ${dmg} (HP ${def.hp}/${def.maxHp})`);
+        this._showHit(def, dmg);
+        this._updateHPBar(def);
+        if (def.hp === 0) { this._log(`¡${def.name} se debilitó!`); this._removeEntity(def); }
     }
 
     _processTurn(prevPositions) {
@@ -198,6 +283,7 @@ class GameScene extends Phaser.Scene {
     _processEnemies() {
         for (const enemy of this.enemies) {
             if (!enemy.alive) continue;
+            if (enemy.sleep > 0) { enemy.sleep--; continue; }
 
             const n = this._nearestParty(enemy);
             if (!n) continue;
@@ -277,7 +363,11 @@ class GameScene extends Phaser.Scene {
         if (this.floor >= CFG.MAX_FLOORS) { this._victory(); return; }
         this.scene.restart({
             floor: this.floor + 1,
-            savedParty: this.party.filter(p => p.alive).map(p => ({ key: p.key, hp: p.hp, maxHp: p.maxHp })),
+            selectedMove: this.selectedMove,
+            savedParty: this.party.filter(p => p.alive).map(p => ({
+                key: p.key, hp: p.hp, maxHp: p.maxHp,
+                moveKeys: p.moveKeys, pp: [...p.pp],
+            })),
         });
     }
 
@@ -354,6 +444,8 @@ class GameScene extends Phaser.Scene {
             placed.push(pos);
             const entity = this._makeEntity(pos.x, pos.y, key, d, false, i === 0);
             entity.hp = (saved.hp !== null && saved.hp !== undefined) ? saved.hp : d.hp;
+            entity.moveKeys = saved.moveKeys ?? [...(d.moves || [])];
+            entity.pp = saved.pp ? [...saved.pp] : entity.moveKeys.map(mk => MOVES[mk]?.pp ?? 10);
             this._updateHPBar(entity);
             return entity;
         });
@@ -415,8 +507,10 @@ class GameScene extends Phaser.Scene {
             hp: data.hp, maxHp: data.hp,
             atk: data.atk, def: data.def,
             sprite, hpFg, hpBarW: barW,
-            facingDx: 0, facingDy: 1,  // default: facing down
+            facingDx: 0, facingDy: 1,
             facingDot,
+            sleep: 0,
+            moveKeys: [], pp: [],
         };
 
         this.occupied.set(`${gx},${gy}`, entity);
@@ -564,6 +658,7 @@ class GameScene extends Phaser.Scene {
         ui.updateParty(this.party);
         ui.updateFloor(this.floor);
         ui.updateMinimap(this.revealed, this.visible, this.dungeon.tiles, this.party, this.enemies);
+        ui.updateMoves(this.party, this.selectedMove);
     }
 
     _uiFloor() {

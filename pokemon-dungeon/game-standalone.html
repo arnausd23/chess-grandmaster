@@ -30,12 +30,29 @@ const CFG = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  POKEMON DATA
+//  MOVES + POKEMON DATA
 // ══════════════════════════════════════════════════════════════════════════════
+const MOVES = {
+    tackle:       { name:'Tackle',       power:40,  pp:35, type:'Normal', range:'single' },
+    scratch:      { name:'Scratch',      power:40,  pp:35, type:'Normal', range:'single' },
+    bite:         { name:'Bite',         power:60,  pp:25, type:'Dark',   range:'single' },
+    vine_whip:    { name:'Vine Whip',    power:45,  pp:25, type:'Grass',  range:'single' },
+    razor_leaf:   { name:'Razor Leaf',   power:55,  pp:25, type:'Grass',  range:'wide'   },
+    growth:       { name:'Growth',       power:0,   pp:20, type:'Grass',  range:'self',   effect:'atk_up' },
+    sleep_powder: { name:'Sleep Powder', power:0,   pp:15, type:'Grass',  range:'room',   effect:'sleep'  },
+    ember:        { name:'Ember',        power:40,  pp:25, type:'Fire',   range:'single' },
+    fire_spin:    { name:'Fire Spin',    power:35,  pp:15, type:'Fire',   range:'wide'   },
+    slash:        { name:'Slash',        power:70,  pp:20, type:'Normal', range:'single' },
+    flamethrower: { name:'Flamethrower', power:95,  pp:15, type:'Fire',   range:'single' },
+    water_gun:    { name:'Water Gun',    power:40,  pp:25, type:'Water',  range:'single' },
+    bubble_beam:  { name:'Bubble Beam',  power:65,  pp:20, type:'Water',  range:'wide'   },
+    rapid_spin:   { name:'Rapid Spin',   power:20,  pp:40, type:'Normal', range:'wide'   },
+    withdraw:     { name:'Withdraw',     power:0,   pp:40, type:'Water',  range:'self',   effect:'def_up' },
+};
 const POKEMON = {
-    bulbasaur:  { name:'Bulbasaur',  type:'Planta',  hp:45, atk:49, def:49, color:0x5ca935, letter:'B' },
-    charmander: { name:'Charmander', type:'Fuego',   hp:39, atk:52, def:43, color:0xf07030, letter:'C' },
-    squirtle:   { name:'Squirtle',   type:'Agua',    hp:44, atk:48, def:65, color:0x4870d0, letter:'S' },
+    bulbasaur:  { name:'Bulbasaur',  type:'Planta',  hp:45, atk:49, def:49, color:0x5ca935, letter:'B', moves:['tackle','vine_whip','razor_leaf','sleep_powder'] },
+    charmander: { name:'Charmander', type:'Fuego',   hp:39, atk:52, def:43, color:0xf07030, letter:'C', moves:['scratch','ember','fire_spin','flamethrower'] },
+    squirtle:   { name:'Squirtle',   type:'Agua',    hp:44, atk:48, def:65, color:0x4870d0, letter:'S', moves:['tackle','water_gun','bubble_beam','withdraw'] },
     rattata:    { name:'Rattata',    type:'Normal',  hp:30, atk:56, def:35, color:0x9050a0, letter:'R', isEnemy:true, floors:[1,4] },
     pidgey:     { name:'Pidgey',     type:'Volador', hp:40, atk:45, def:40, color:0xb08820, letter:'P', isEnemy:true, floors:[1,5] },
     geodude:    { name:'Geodude',    type:'Roca',    hp:40, atk:80, def:100,color:0x806040, letter:'G', isEnemy:true, floors:[3,8] },
@@ -152,8 +169,8 @@ class MenuScene extends Phaser.Scene {
             this.add.text(x,y+52,`HP ${d.hp}  ATK ${d.atk}  DEF ${d.def}`,{fontSize:'10px',color:'#888888'}).setOrigin(0.5);
         });
         this.add.rectangle(W/2,462,680,86,0x111a2a,0.9);
-        ['↑↓←→ / WASD → Mover / atacar al chocar    •    Z → Atacar en dirección actual',
-         'SPACE → Esperar turno    •    Los aliados te siguen y atacan solos',
+        ['↑↓←→ / WASD → Mover / atacar al chocar    •    Z → Usar movimiento seleccionado',
+         '1/2/3/4 → Elegir movimiento    •    SPACE → Esperar turno    •    Los aliados atacan solos',
          'Moverse hacia un aliado → intercambiar posiciones    •    ▼ escaleras = siguiente piso'
         ].forEach((t,i)=>this.add.text(W/2,442+i*22,t,{fontSize:'12px',color:'#888899'}).setOrigin(0.5));
         const btnBg=this.add.rectangle(W/2,540,280,48,0x1e5628).setInteractive({cursor:'pointer'});
@@ -173,7 +190,7 @@ class MenuScene extends Phaser.Scene {
 // ══════════════════════════════════════════════════════════════════════════════
 class GameScene extends Phaser.Scene {
     constructor(){super({key:'GameScene'});}
-    init(data){this.floor=data.floor||1;this.savedParty=data.savedParty||null;}
+    init(data){this.floor=data.floor||1;this.savedParty=data.savedParty||null;this.selectedMove=data.selectedMove??0;}
 
     create(){
         const TS=CFG.TILE;
@@ -197,6 +214,12 @@ class GameScene extends Phaser.Scene {
             wait:Phaser.Input.Keyboard.KeyCodes.SPACE,
             attack:Phaser.Input.Keyboard.KeyCodes.Z,
         });
+        this.moveSelectKeys=[
+            this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
+            this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
+            this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE),
+            this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR),
+        ];
         this.state='WAITING';this.moveTimer=0;this.transitioning=false;
         this._updateVisibility();this._drawFog();
         if(!this.scene.isActive('UIScene'))this.scene.launch('UIScene');
@@ -214,7 +237,16 @@ class GameScene extends Phaser.Scene {
         else if(C.down.isDown ||W.down.isDown) dy= 1;
         else if(Phaser.Input.Keyboard.JustDown(W.wait)){this.moveTimer=time+CFG.MOVE_DELAY;this._processTurn(null);return;}
         else if(Phaser.Input.Keyboard.JustDown(W.attack)){this.moveTimer=time+CFG.MOVE_DELAY;this._doAttack();return;}
-        else return;
+        else{
+            for(let i=0;i<4;i++){
+                if(Phaser.Input.Keyboard.JustDown(this.moveSelectKeys[i])){
+                    const leader=this.party[0];
+                    if(leader?.moveKeys&&i<leader.moveKeys.length){this.selectedMove=i;this._uiUpdate();}
+                    return;
+                }
+            }
+            return;
+        }
         this.moveTimer=time+CFG.MOVE_DELAY;
         this._tryMoveLeader(dx,dy);
     }
@@ -264,14 +296,49 @@ class GameScene extends Phaser.Scene {
         this._processTurn(prev);
     }
 
-    // Z key: attack in facing direction without moving
     _doAttack(){
         const leader=this.party[0];
-        const nx=leader.gx+leader.facingDx,ny=leader.gy+leader.facingDy;
-        const occ=this._inBounds(nx,ny)?this.occupied.get(`${nx},${ny}`):null;
-        if(occ&&occ.isEnemy)this._combat(leader,occ);
-        else this._log(`${leader.name} atacó al viento…`);
+        const moveKey=leader.moveKeys?.[this.selectedMove],moveDef=moveKey?MOVES[moveKey]:null;
+        if(!moveDef){this._processTurn(null);return;}
+        if(leader.pp[this.selectedMove]<=0){this._log(`¡${moveDef.name} no tiene PP!`);return;}
+        leader.pp[this.selectedMove]--;
+        if(moveDef.range==='self'){this._applySelfMove(leader,moveDef);this._processTurn(null);return;}
+        const targets=this._getMoveTargets(leader,moveDef);
+        if(targets.length===0)this._log(`${leader.name} usó ${moveDef.name}… ¡pero no había nadie!`);
+        else for(const t of targets)this._combatWithMove(leader,t,moveDef);
         this._processTurn(null);
+    }
+    _applySelfMove(entity,moveDef){
+        if(moveDef.effect==='atk_up'){entity.atk+=8;this._log(`¡${entity.name} usó ${moveDef.name}! ¡Su Ataque subió!`);}
+        else if(moveDef.effect==='def_up'){entity.def+=8;this._log(`¡${entity.name} usó ${moveDef.name}! ¡Su Defensa subió!`);}
+        else this._log(`¡${entity.name} usó ${moveDef.name}!`);
+    }
+    _getMoveTargets(entity,moveDef){
+        const targets=[],{gx,gy,facingDx,facingDy}=entity;
+        if(moveDef.range==='single'){
+            const occ=this._inBounds(gx+facingDx,gy+facingDy)?this.occupied.get(`${gx+facingDx},${gy+facingDy}`):null;
+            if(occ&&occ.isEnemy&&occ.alive)targets.push(occ);
+        }else if(moveDef.range==='wide'){
+            const arc=facingDx!==0?[[facingDx,-1],[facingDx,0],[facingDx,1]]:[[-1,facingDy],[0,facingDy],[1,facingDy]];
+            for(const[dx,dy]of arc){
+                const occ=this._inBounds(gx+dx,gy+dy)?this.occupied.get(`${gx+dx},${gy+dy}`):null;
+                if(occ&&occ.isEnemy&&occ.alive)targets.push(occ);
+            }
+        }else if(moveDef.range==='room'){
+            for(const e of this.enemies)if(e.alive&&this.visible[e.gy]?.[e.gx])targets.push(e);
+        }
+        return targets;
+    }
+    _combatWithMove(atk,def,moveDef){
+        if(moveDef.power===0){
+            if(moveDef.effect==='sleep'){def.sleep=3;this._log(`¡${def.name} se quedó dormido!`);}
+            return;
+        }
+        const dmg=Math.max(1,Math.floor(atk.atk*moveDef.power/100)-Math.floor(def.def/3)+Phaser.Math.Between(-2,3));
+        def.hp=Math.max(0,def.hp-dmg);
+        this._log(`${atk.name} → ${def.name} [${moveDef.name}]: ${dmg} (HP ${def.hp}/${def.maxHp})`);
+        this._showHit(def,dmg);this._updateHPBar(def);
+        if(def.hp===0){this._log(`¡${def.name} se debilitó!`);this._removeEntity(def);}
     }
 
     _processTurn(prevPositions){
@@ -312,6 +379,7 @@ class GameScene extends Phaser.Scene {
     _processEnemies(){
         for(const e of this.enemies){
             if(!e.alive)continue;
+            if(e.sleep>0){e.sleep--;continue;}
             const n=this._nearestParty(e);if(!n)continue;
             const dist=Math.abs(e.gx-n.gx)+Math.abs(e.gy-n.gy);
             if(dist===1){this._combat(e,n);}
@@ -357,7 +425,8 @@ class GameScene extends Phaser.Scene {
 
     _nextFloor(){
         if(this.floor>=CFG.MAX_FLOORS){this._victory();return;}
-        this.scene.restart({floor:this.floor+1,savedParty:this.party.filter(p=>p.alive).map(p=>({key:p.key,hp:p.hp,maxHp:p.maxHp}))});
+        this.scene.restart({floor:this.floor+1,selectedMove:this.selectedMove,
+            savedParty:this.party.filter(p=>p.alive).map(p=>({key:p.key,hp:p.hp,maxHp:p.maxHp,moveKeys:p.moveKeys,pp:[...p.pp]}))});
     }
     _gameOver(){this.transitioning=true;this.time.delayedCall(1200,()=>{this.scene.stop('UIScene');this.scene.start('GameOverScene');});}
     _victory(){this.transitioning=true;this.time.delayedCall(800,()=>{this.scene.stop('UIScene');this.scene.start('VictoryScene');});}
@@ -396,6 +465,8 @@ class GameScene extends Phaser.Scene {
             placed.push(pos);
             const entity=this._makeEntity(pos.x,pos.y,key,d,false,i===0);
             entity.hp=(saved.hp!=null)?saved.hp:d.hp;
+            entity.moveKeys=saved.moveKeys??[...(d.moves||[])];
+            entity.pp=saved.pp?[...saved.pp]:entity.moveKeys.map(mk=>MOVES[mk]?.pp??10);
             this._updateHPBar(entity);
             return entity;
         });
@@ -435,7 +506,7 @@ class GameScene extends Phaser.Scene {
         // Facing indicator dot (party only)
         let facingDot=null;
         if(!isEnemy){facingDot=this.add.circle(0,r-3,3,0xffffff,0.9);sprite.add(facingDot);}
-        const entity={key,name:data.name,isEnemy,gx,gy,alive:true,hp:data.hp,maxHp:data.hp,atk:data.atk,def:data.def,sprite,hpFg,hpBarW:barW,facingDx:0,facingDy:1,facingDot};
+        const entity={key,name:data.name,isEnemy,gx,gy,alive:true,hp:data.hp,maxHp:data.hp,atk:data.atk,def:data.def,sprite,hpFg,hpBarW:barW,facingDx:0,facingDy:1,facingDot,sleep:0,moveKeys:[],pp:[]};
         this.occupied.set(`${gx},${gy}`,entity);
         return entity;
     }
@@ -510,6 +581,7 @@ class GameScene extends Phaser.Scene {
         const ui=this.scene.get('UIScene');if(!ui?.sys.isActive())return;
         ui.updateParty(this.party);ui.updateFloor(this.floor);
         ui.updateMinimap(this.revealed,this.visible,this.dungeon.tiles,this.party,this.enemies);
+        ui.updateMoves(this.party,this.selectedMove);
     }
     _uiFloor(){const ui=this.scene.get('UIScene');if(!ui?.sys.isActive())return;ui.updateFloor(this.floor);}
     _log(msg){const ui=this.scene.get('UIScene');if(ui?.sys.isActive())ui.addLog(msg);}
@@ -547,6 +619,24 @@ class UIScene extends Phaser.Scene {
         this.add.rectangle(this.mmX+mmW/2,this.mmY+mmH/2,mmW+2,mmH+2,0x000000,0.8).setStrokeStyle(1,0x334466,0.7);
         this.mmGfx=this.add.graphics();
 
+        // ── Move panel (below minimap) ───────────────────────────────────
+        const slotH=52,mpStartY=292,mpH=16+4*slotH;
+        this.add.rectangle(90,mpStartY+mpH/2,180,mpH,0x000000,0.72);
+        this.add.rectangle(90,mpStartY+mpH/2,180,mpH,0x224466,0.1).setStrokeStyle(1,0x334466,0.8);
+        this.add.text(8,mpStartY+2,'ATAQUES  [1][2][3][4]',{fontSize:'10px',color:'#aabbcc',fontStyle:'bold'});
+        this.moveSlots=[];
+        for(let i=0;i<4;i++){
+            const sy=mpStartY+18+i*slotH;
+            const selBg=this.add.rectangle(90,sy+slotH/2-2,176,slotH-2,0x1a3350,0);
+            this.add.text(8,sy+6,`${i+1}`,{fontSize:'11px',color:'#ffd700',fontStyle:'bold'});
+            const nameTxt=this.add.text(20,sy+6,'—',{fontSize:'11px',color:'#ccddee'});
+            const typeTxt=this.add.text(176,sy+6,'',{fontSize:'9px',color:'#aaaaaa'}).setOrigin(1,0);
+            const ppBg=this.add.rectangle(20,sy+28,110,4,0x333333).setOrigin(0,0.5);
+            const ppFg=this.add.rectangle(20,sy+28,110,4,0x4488ff).setOrigin(0,0.5);
+            const ppTxt=this.add.text(20,sy+35,'',{fontSize:'9px',color:'#888899'});
+            this.moveSlots.push({selBg,nameTxt,typeTxt,ppBg,ppFg,ppTxt});
+        }
+
         // ── Floor indicator ──────────────────────────────────────────────
         this.add.rectangle(W-80,18,130,28,0x000000,0.72).setStrokeStyle(1,0x334466,0.8);
         this.floorText=this.add.text(W-80,18,'PISO  1 / 10',{fontSize:'13px',color:'#ffd700',fontStyle:'bold'}).setOrigin(0.5);
@@ -561,7 +651,7 @@ class UIScene extends Phaser.Scene {
         }
 
         // ── Controls hint ─────────────────────────────────────────────────
-        this.add.text(W-8,H-logH-4,'Z = Atacar  •  SPACE = Esperar',{fontSize:'9px',color:'#445566'}).setOrigin(1,1);
+        this.add.text(W-8,H-logH-4,'1/2/3/4 = Mov.  •  Z = Usar movimiento  •  SPACE = Esperar',{fontSize:'9px',color:'#445566'}).setOrigin(1,1);
     }
 
     updateParty(party){
@@ -606,6 +696,25 @@ class UIScene extends Phaser.Scene {
         }
     }
 
+    updateMoves(party,selectedMove){
+        if(!party||party.length===0||!this.moveSlots)return;
+        const leader=party[0];
+        const TC={Normal:'#aaaaaa',Grass:'#66dd44',Fire:'#ff7744',Water:'#44aaff',Dark:'#9977bb'};
+        for(let i=0;i<this.moveSlots.length;i++){
+            const slot=this.moveSlots[i],isSel=i===selectedMove;
+            const moveKey=leader.moveKeys?.[i],moveDef=moveKey?MOVES[moveKey]:null;
+            const pp=leader.pp?.[i]??0;
+            if(isSel)slot.selBg.setFillStyle(0x1a3350,0.85).setStrokeStyle(2,0xffd700,1);
+            else slot.selBg.setFillStyle(0x000000,0).setStrokeStyle(0);
+            if(!moveDef){slot.nameTxt.setText('—').setColor('#445566');slot.typeTxt.setText('');slot.ppFg.width=0;slot.ppTxt.setText('');continue;}
+            const ppMax=moveDef.pp,ppRatio=ppMax>0?pp/ppMax:0;
+            const ppCol=ppRatio>0.5?0x44cc44:ppRatio>0.25?0xffcc00:0xff4444;
+            slot.nameTxt.setText(moveDef.name).setColor(isSel?'#ffd700':'#ccddee');
+            slot.typeTxt.setText(moveDef.type).setColor(TC[moveDef.type]||'#aaaaaa');
+            slot.ppFg.width=110*ppRatio;slot.ppFg.fillColor=ppCol;
+            slot.ppTxt.setText(`PP ${pp}/${ppMax}`).setColor(pp<=0?'#ff4444':'#778899');
+        }
+    }
     addLog(msg){
         this.logLines.unshift(msg);
         if(this.logLines.length>this.logTexts.length)this.logLines.pop();

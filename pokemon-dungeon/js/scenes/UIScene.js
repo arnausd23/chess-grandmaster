@@ -41,6 +41,28 @@ class UIScene extends Phaser.Scene {
 
         this.mmGfx = this.add.graphics();
 
+        // ── Move panel (below minimap) ─────────────────────────────────────
+        const slotH = 52;
+        const mpStartY = 292;
+        const mpH = 16 + 4 * slotH;
+        this.add.rectangle(panelW / 2, mpStartY + mpH / 2, panelW, mpH, 0x000000, 0.72);
+        this.add.rectangle(panelW / 2, mpStartY + mpH / 2, panelW, mpH, 0x224466, 0.1)
+            .setStrokeStyle(1, 0x334466, 0.8);
+        this.add.text(8, mpStartY + 2, 'ATAQUES  [1][2][3][4]', { fontSize: '10px', color: '#aabbcc', fontStyle: 'bold' });
+
+        this.moveSlots = [];
+        for (let i = 0; i < 4; i++) {
+            const sy = mpStartY + 18 + i * slotH;
+            const selBg = this.add.rectangle(panelW / 2, sy + slotH / 2 - 2, panelW - 4, slotH - 2, 0x1a3350, 0);
+            this.add.text(8, sy + 6, `${i + 1}`, { fontSize: '11px', color: '#ffd700', fontStyle: 'bold' });
+            const nameTxt = this.add.text(20, sy + 6, '—', { fontSize: '11px', color: '#ccddee' });
+            const typeTxt = this.add.text(panelW - 4, sy + 6, '', { fontSize: '9px', color: '#aaaaaa' }).setOrigin(1, 0);
+            const ppBg = this.add.rectangle(20, sy + 28, 110, 4, 0x333333).setOrigin(0, 0.5);
+            const ppFg = this.add.rectangle(20, sy + 28, 110, 4, 0x4488ff).setOrigin(0, 0.5);
+            const ppTxt = this.add.text(20, sy + 35, '', { fontSize: '9px', color: '#888899' });
+            this.moveSlots.push({ selBg, nameTxt, typeTxt, ppBg, ppFg, ppTxt });
+        }
+
         // ── Top-right: floor indicator ────────────────────────────────────
         this.add.rectangle(W - 80, 18, 130, 28, 0x000000, 0.72).setStrokeStyle(1, 0x334466, 0.8);
         this.floorText = this.add.text(W - 80, 18, 'PISO  1 / 10', {
@@ -63,7 +85,7 @@ class UIScene extends Phaser.Scene {
         }
 
         // ── Controls hint (bottom-right) ──────────────────────────────────
-        this.add.text(W - 8, H - logH - 4, 'Z = Atacar  •  SPACE = Esperar', {
+        this.add.text(W - 8, H - logH - 4, '1/2/3/4 = Mov.  •  Z = Usar movimiento  •  SPACE = Esperar', {
             fontSize: '9px', color: '#445566',
         }).setOrigin(1, 1);
     }
@@ -142,6 +164,48 @@ class UIScene extends Phaser.Scene {
     }
 
     // ─────────────── LOG ──────────────────────────────────────────────────
+
+    // ─────────────── MOVES ────────────────────────────────────────────────
+
+    updateMoves(party, selectedMove) {
+        if (!party || party.length === 0 || !this.moveSlots) return;
+        const leader = party[0];
+        const TYPE_COL = {
+            Normal: '#aaaaaa', Grass: '#66dd44', Fire: '#ff7744',
+            Water: '#44aaff', Dark: '#9977bb',
+        };
+        for (let i = 0; i < this.moveSlots.length; i++) {
+            const slot = this.moveSlots[i];
+            const isSelected = i === selectedMove;
+            const moveKey = leader.moveKeys?.[i];
+            const moveDef = moveKey ? MOVES[moveKey] : null;
+            const pp = leader.pp?.[i] ?? 0;
+
+            if (isSelected) {
+                slot.selBg.setFillStyle(0x1a3350, 0.85).setStrokeStyle(2, 0xffd700, 1);
+            } else {
+                slot.selBg.setFillStyle(0x000000, 0).setStrokeStyle(0);
+            }
+
+            if (!moveDef) {
+                slot.nameTxt.setText('—').setColor('#445566');
+                slot.typeTxt.setText('');
+                slot.ppFg.width = 0;
+                slot.ppTxt.setText('');
+                continue;
+            }
+
+            const ppMax = moveDef.pp;
+            const ppRatio = ppMax > 0 ? pp / ppMax : 0;
+            const ppColor = ppRatio > 0.5 ? 0x44cc44 : ppRatio > 0.25 ? 0xffcc00 : 0xff4444;
+
+            slot.nameTxt.setText(moveDef.name).setColor(isSelected ? '#ffd700' : '#ccddee');
+            slot.typeTxt.setText(moveDef.type).setColor(TYPE_COL[moveDef.type] || '#aaaaaa');
+            slot.ppFg.width = 110 * ppRatio;
+            slot.ppFg.fillColor = ppColor;
+            slot.ppTxt.setText(`PP ${pp}/${ppMax}`).setColor(pp <= 0 ? '#ff4444' : '#778899');
+        }
+    }
 
     addLog(msg) {
         this.logLines.unshift(msg);

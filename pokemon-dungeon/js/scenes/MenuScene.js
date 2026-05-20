@@ -81,8 +81,8 @@ class MenuScene extends Phaser.Scene {
         // Controls info box
         this.add.rectangle(W / 2, 462, 600, 86, 0x111a2a, 0.9);
         const controls = [
-            '↑↓←→ / WASD → Mover / atacar al chocar    •    Z → Atacar en dirección actual',
-            'SPACE → Esperar turno    •    Los aliados te siguen y atacan solos',
+            '↑↓←→ / WASD → Mover / atacar al chocar    •    Z → Usar movimiento seleccionado',
+            '1/2/3/4 → Elegir movimiento    •    SPACE → Esperar turno    •    Los aliados atacan solos',
             'Moverse hacia un aliado → intercambiar posiciones    •    ▼ escaleras = siguiente piso',
         ];
         controls.forEach((t, i) => {

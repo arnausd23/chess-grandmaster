@@ -25,7 +25,8 @@ const CFG = {
         CORRIDOR: 0x2a1e13, STAIRS_FG: 0xffd700,
         PARTY_LEADER: 0xffd700,
     },
-    SIGHT_RADIUS: 2, MOVE_DELAY: 160,
+    SIGHT_RADIUS: 4,
+    MOVE_DELAY: 160,
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -53,56 +54,53 @@ function getEnemiesForFloor(floor) {
 //  DUNGEON GENERATOR + BFS
 // ══════════════════════════════════════════════════════════════════════════════
 class DungeonGen {
-    constructor(w, h) { this.w = w; this.h = h; }
-    generate(floor) {
-        const tiles = Array.from({length:this.h}, () => new Array(this.w).fill(CFG.T.WALL));
-        const rooms = [];
-        for (let attempt = 0; attempt < 300 && rooms.length < 12; attempt++) {
-            const rw = 5 + Math.floor(Math.random() * 8);
-            const rh = 4 + Math.floor(Math.random() * 6);
-            const rx = 1 + Math.floor(Math.random() * (this.w - rw - 2));
-            const ry = 1 + Math.floor(Math.random() * (this.h - rh - 2));
-            const overlaps = rooms.some(r => rx<r.x+r.w+2 && rx+rw+2>r.x && ry<r.y+r.h+2 && ry+rh+2>r.y);
-            if (!overlaps) {
+    constructor(w,h){this.w=w;this.h=h;}
+    generate(floor){
+        const tiles=Array.from({length:this.h},()=>new Array(this.w).fill(CFG.T.WALL));
+        const rooms=[];
+        for(let attempt=0;attempt<300&&rooms.length<12;attempt++){
+            const rw=5+Math.floor(Math.random()*8),rh=4+Math.floor(Math.random()*6);
+            const rx=1+Math.floor(Math.random()*(this.w-rw-2)),ry=1+Math.floor(Math.random()*(this.h-rh-2));
+            if(!rooms.some(r=>rx<r.x+r.w+2&&rx+rw+2>r.x&&ry<r.y+r.h+2&&ry+rh+2>r.y)){
                 rooms.push({x:rx,y:ry,w:rw,h:rh});
-                for (let y=ry; y<ry+rh; y++) for (let x=rx; x<rx+rw; x++) tiles[y][x]=CFG.T.FLOOR;
+                for(let y=ry;y<ry+rh;y++)for(let x=rx;x<rx+rw;x++)tiles[y][x]=CFG.T.FLOOR;
             }
         }
-        if (rooms.length < 2) return this.generate(floor);
-        for (let i = 1; i < rooms.length; i++) {
-            const a=rooms[i-1], b=rooms[i];
-            const ax=(a.x+a.w/2)|0, ay=(a.y+a.h/2)|0, bx=(b.x+b.w/2)|0, by=(b.y+b.h/2)|0;
-            if (Math.random()<0.5) { hCor(tiles,ax,bx,ay); vCor(tiles,ay,by,bx); }
-            else                   { vCor(tiles,ay,by,ax); hCor(tiles,ax,bx,by); }
+        if(rooms.length<2)return this.generate(floor);
+        for(let i=1;i<rooms.length;i++){
+            const a=rooms[i-1],b=rooms[i];
+            const ax=(a.x+a.w/2)|0,ay=(a.y+a.h/2)|0,bx=(b.x+b.w/2)|0,by=(b.y+b.h/2)|0;
+            if(Math.random()<0.5){hCor(tiles,ax,bx,ay);vCor(tiles,ay,by,bx);}
+            else{vCor(tiles,ay,by,ax);hCor(tiles,ax,bx,by);}
         }
         const last=rooms[rooms.length-1];
-        const sx=(last.x+last.w/2)|0, sy=(last.y+last.h/2)|0;
+        const sx=(last.x+last.w/2)|0,sy=(last.y+last.h/2)|0;
         tiles[sy][sx]=CFG.T.STAIRS;
         const first=rooms[0];
-        const startX=(first.x+first.w/2)|0, startY=(first.y+first.h/2)|0;
+        const startX=(first.x+first.w/2)|0,startY=(first.y+first.h/2)|0;
         const available=getEnemiesForFloor(floor);
         const enemies=[];
-        for (let i=0; i<Math.min(3+floor*2,18); i++) {
+        for(let i=0;i<Math.min(3+floor*2,18);i++){
             const ri=1+Math.floor(Math.random()*(rooms.length-1));
             const r=rooms[ri];
-            const ex=r.x+Math.floor(Math.random()*r.w), ey=r.y+Math.floor(Math.random()*r.h);
-            if (!(ex===sx&&ey===sy) && available.length>0)
+            const ex=r.x+Math.floor(Math.random()*r.w),ey=r.y+Math.floor(Math.random()*r.h);
+            if(!(ex===sx&&ey===sy)&&available.length>0)
                 enemies.push({x:ex,y:ey,key:available[Math.floor(Math.random()*available.length)]});
         }
         const items=[];
-        for (let i=0; i<2+Math.floor(Math.random()*4); i++) {
+        for(let i=0;i<2+Math.floor(Math.random()*4);i++){
             const r=rooms[Math.floor(Math.random()*rooms.length)];
-            items.push({x:r.x+Math.floor(Math.random()*r.w), y:r.y+Math.floor(Math.random()*r.h),
+            items.push({x:r.x+Math.floor(Math.random()*r.w),y:r.y+Math.floor(Math.random()*r.h),
                         type:Math.random()<0.65?'berry':'elixir'});
         }
-        return {tiles,rooms,startX,startY,enemies,items};
+        return{tiles,rooms,startX,startY,enemies,items};
     }
 }
-function hCor(t,x1,x2,y){const[a,b]=x1<x2?[x1,x2]:[x2,x1]; for(let x=a;x<=b;x++) if(t[y][x]===CFG.T.WALL)t[y][x]=CFG.T.CORRIDOR;}
-function vCor(t,y1,y2,x){const[a,b]=y1<y2?[y1,y2]:[y2,y1]; for(let y=a;y<=b;y++) if(t[y][x]===CFG.T.WALL)t[y][x]=CFG.T.CORRIDOR;}
+function hCor(t,x1,x2,y){const[a,b]=x1<x2?[x1,x2]:[x2,x1];for(let x=a;x<=b;x++)if(t[y][x]===CFG.T.WALL)t[y][x]=CFG.T.CORRIDOR;}
+function vCor(t,y1,y2,x){const[a,b]=y1<y2?[y1,y2]:[y2,y1];for(let y=a;y<=b;y++)if(t[y][x]===CFG.T.WALL)t[y][x]=CFG.T.CORRIDOR;}
 function bfsStep(tiles,from,to,w,h){
     if(Math.abs(from.x-to.x)+Math.abs(from.y-to.y)>12)return null;
-    const queue=[from], visited=new Map();
+    const queue=[from],visited=new Map();
     visited.set(`${from.x},${from.y}`,null);
     while(queue.length>0){
         const curr=queue.shift();
@@ -118,7 +116,7 @@ function bfsStep(tiles,from,to,w,h){
         for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){
             const nx=curr.x+dx,ny=curr.y+dy,k=`${nx},${ny}`;
             if(nx>=0&&ny>=0&&nx<w&&ny<h&&tiles[ny][nx]!==CFG.T.WALL&&!visited.has(k)){
-                visited.set(k,curr); queue.push({x:nx,y:ny});
+                visited.set(k,curr);queue.push({x:nx,y:ny});
             }
         }
     }
@@ -133,7 +131,7 @@ class MenuScene extends Phaser.Scene {
     create(){
         const W=CFG.WIDTH,H=CFG.HEIGHT;
         this.add.rectangle(W/2,H/2,W,H,0x0d1117);
-        for(let i=0;i<5;i++) this.add.rectangle(W/2,H/2,W,H-i*80,0x16213e,0.15*(5-i));
+        for(let i=0;i<5;i++)this.add.rectangle(W/2,H/2,W,H-i*80,0x16213e,0.15*(5-i));
         for(let i=0;i<60;i++){
             const x=Math.random()*W,y=Math.random()*H*0.6,r=Math.random()<0.8?1:2;
             this.add.circle(x,y,r,0xffffff,Math.random()*0.6+0.2);
@@ -142,24 +140,21 @@ class MenuScene extends Phaser.Scene {
         this.add.text(W/2,130,'MYSTERY DUNGEON',{fontSize:'30px',color:'#ffffff',fontStyle:'bold',stroke:'#555',strokeThickness:3}).setOrigin(0.5);
         this.add.text(W/2,168,'— Torre del Tiempo —',{fontSize:'16px',color:'#aaaaaa',fontStyle:'italic'}).setOrigin(0.5);
         this.add.text(W/2,218,'Tu equipo de exploración',{fontSize:'17px',color:'#e0e0e0'}).setOrigin(0.5);
-        const starters=['bulbasaur','charmander','squirtle'];
-        const xs=[W/2-220,W/2,W/2+220];
-        starters.forEach((key,i)=>{
-            const d=POKEMON[key],x=xs[i],y=310;
+        ['bulbasaur','charmander','squirtle'].forEach((key,i)=>{
+            const d=POKEMON[key],x=[W/2-220,W/2,W/2+220][i],y=310;
             this.add.rectangle(x,y,150,140,0x1a2744,0.9);
             this.add.rectangle(x,y,150,140,i===0?0xffd700:0x444466,0.4).setStrokeStyle(2,i===0?0xffd700:0x446688);
             this.add.text(x,y-56,i===0?'★ LÍDER':`Aliado ${i}`,{fontSize:'11px',color:i===0?'#ffd700':'#8888aa',fontStyle:'bold'}).setOrigin(0.5);
-            this.add.circle(x,y-22,32,d.color,0.9);
-            this.add.circle(x,y-22,26,d.color);
+            this.add.circle(x,y-22,32,d.color,0.9);this.add.circle(x,y-22,26,d.color);
             this.add.text(x,y-22,d.letter,{fontSize:'26px',color:'#fff',fontStyle:'bold'}).setOrigin(0.5);
             this.add.text(x,y+20,d.name,{fontSize:'13px',color:'#e0e0e0',fontStyle:'bold'}).setOrigin(0.5);
             this.add.text(x,y+36,`Tipo: ${d.type}`,{fontSize:'11px',color:'#aaaacc'}).setOrigin(0.5);
             this.add.text(x,y+52,`HP ${d.hp}  ATK ${d.atk}  DEF ${d.def}`,{fontSize:'10px',color:'#888888'}).setOrigin(0.5);
         });
-        this.add.rectangle(W/2,462,600,86,0x111a2a,0.9);
-        ['↑↓←→ / WASD → Mover líder    •    SPACE → Esperar turno',
-         'Camina hacia un enemigo para atacarlo',
-         'Los aliados siguen automáticamente    •    ▼ escaleras = siguiente piso'
+        this.add.rectangle(W/2,462,680,86,0x111a2a,0.9);
+        ['↑↓←→ / WASD → Mover / atacar al chocar    •    Z → Atacar en dirección actual',
+         'SPACE → Esperar turno    •    Los aliados te siguen y atacan solos',
+         'Moverse hacia un aliado → intercambiar posiciones    •    ▼ escaleras = siguiente piso'
         ].forEach((t,i)=>this.add.text(W/2,442+i*22,t,{fontSize:'12px',color:'#888899'}).setOrigin(0.5));
         const btnBg=this.add.rectangle(W/2,540,280,48,0x1e5628).setInteractive({cursor:'pointer'});
         const btnTxt=this.add.text(W/2,540,'¡COMENZAR AVENTURA!',{fontSize:'16px',color:'#ffffff',fontStyle:'bold'}).setOrigin(0.5);
@@ -178,7 +173,7 @@ class MenuScene extends Phaser.Scene {
 // ══════════════════════════════════════════════════════════════════════════════
 class GameScene extends Phaser.Scene {
     constructor(){super({key:'GameScene'});}
-    init(data){this.floor=data.floor||1; this.savedParty=data.savedParty||null;}
+    init(data){this.floor=data.floor||1;this.savedParty=data.savedParty||null;}
 
     create(){
         const TS=CFG.TILE;
@@ -200,9 +195,10 @@ class GameScene extends Phaser.Scene {
             up:Phaser.Input.Keyboard.KeyCodes.W, down:Phaser.Input.Keyboard.KeyCodes.S,
             left:Phaser.Input.Keyboard.KeyCodes.A, right:Phaser.Input.Keyboard.KeyCodes.D,
             wait:Phaser.Input.Keyboard.KeyCodes.SPACE,
+            attack:Phaser.Input.Keyboard.KeyCodes.Z,
         });
-        this.state='WAITING'; this.moveTimer=0; this.transitioning=false;
-        this._updateVisibility(); this._drawFog();
+        this.state='WAITING';this.moveTimer=0;this.transitioning=false;
+        this._updateVisibility();this._drawFog();
         if(!this.scene.isActive('UIScene'))this.scene.launch('UIScene');
         this.time.delayedCall(80,()=>{this._uiUpdate();this._uiFloor();});
     }
@@ -217,6 +213,7 @@ class GameScene extends Phaser.Scene {
         else if(C.up.isDown   ||W.up.isDown)   dy=-1;
         else if(C.down.isDown ||W.down.isDown) dy= 1;
         else if(Phaser.Input.Keyboard.JustDown(W.wait)){this.moveTimer=time+CFG.MOVE_DELAY;this._processTurn(null);return;}
+        else if(Phaser.Input.Keyboard.JustDown(W.attack)){this.moveTimer=time+CFG.MOVE_DELAY;this._doAttack();return;}
         else return;
         this.moveTimer=time+CFG.MOVE_DELAY;
         this._tryMoveLeader(dx,dy);
@@ -224,19 +221,39 @@ class GameScene extends Phaser.Scene {
 
     _tryMoveLeader(dx,dy){
         const leader=this.party[0];
-        const nx=leader.gx+dx, ny=leader.gy+dy;
+        const nx=leader.gx+dx,ny=leader.gy+dy;
         if(!this._inBounds(nx,ny))return;
         const tile=this.dungeon.tiles[ny][nx];
-        if(tile===CFG.T.WALL)return;
-        for(let i=1;i<this.party.length;i++)if(this.party[i].gx===nx&&this.party[i].gy===ny)return;
+        if(tile===CFG.T.WALL){this._setFacing(leader,dx,dy);return;}
+
+        // Ally at target → swap positions atomically
+        const allyIdx=this.party.findIndex((p,i)=>i>0&&p.alive&&p.gx===nx&&p.gy===ny);
+        if(allyIdx>0){
+            this._setFacing(leader,dx,dy);
+            this._swapEntities(leader,this.party[allyIdx]);
+            if(this.dungeon.tiles[leader.gy][leader.gx]===CFG.T.STAIRS){
+                this._log(`¡${leader.name} encontró las escaleras! Bajando al Piso ${this.floor+1}...`);
+                this.transitioning=true;
+                this.time.delayedCall(600,()=>this._nextFloor());
+                return;
+            }
+            this._processTurn(null);
+            return;
+        }
+
         const occ=this.occupied.get(`${nx},${ny}`);
+        // Enemy → bump-attack (PMD style: stay in place, damage enemy)
         if(occ&&occ.isEnemy){
+            this._setFacing(leader,dx,dy);
             const prev=this._snap();
             this._combat(leader,occ);
             this._processTurn(prev);
             return;
         }
+
+        // Normal move
         const prev=this._snap();
+        this._setFacing(leader,dx,dy);
         this._move(leader,nx,ny);
         if(tile===CFG.T.STAIRS){
             this._log(`¡${leader.name} encontró las escaleras! Bajando al Piso ${this.floor+1}...`);
@@ -247,26 +264,46 @@ class GameScene extends Phaser.Scene {
         this._processTurn(prev);
     }
 
-    _processTurn(prevPos){
+    // Z key: attack in facing direction without moving
+    _doAttack(){
+        const leader=this.party[0];
+        const nx=leader.gx+leader.facingDx,ny=leader.gy+leader.facingDy;
+        const occ=this._inBounds(nx,ny)?this.occupied.get(`${nx},${ny}`):null;
+        if(occ&&occ.isEnemy)this._combat(leader,occ);
+        else this._log(`${leader.name} atacó al viento…`);
+        this._processTurn(null);
+    }
+
+    _processTurn(prevPositions){
         this.state='PROCESSING';
-        if(prevPos){
+        if(prevPositions){
             for(let i=1;i<this.party.length;i++){
-                const f=this.party[i]; if(!f.alive)continue;
-                const tgt=prevPos[i-1];
-                if(!this.occupied.has(`${tgt.x},${tgt.y}`))this._move(f,tgt.x,tgt.y);
+                const f=this.party[i];if(!f.alive)continue;
+                const tgt=prevPositions[i-1];
+                if(!this.occupied.has(`${tgt.x},${tgt.y}`)){
+                    const fdx=Math.sign(tgt.x-f.gx),fdy=Math.sign(tgt.y-f.gy);
+                    if(fdx!==0||fdy!==0)this._setFacing(f,fdx,fdy);
+                    this._move(f,tgt.x,tgt.y);
+                }
             }
         }
+        // Followers auto-attack adjacent enemies
         for(const m of this.party){
             if(!m.alive)continue;
             const adj=this._adjEnemies(m);
-            if(adj.length>0)this._combat(m,adj[0]);
+            if(adj.length>0){
+                const e=adj[0];
+                this._setFacing(m,Math.sign(e.gx-m.gx),Math.sign(e.gy-m.gy));
+                this._combat(m,e);
+            }
         }
+        // Item pickups
         for(const m of this.party){
             if(!m.alive)continue;
             const item=this.items.find(it=>it.alive&&it.gx===m.gx&&it.gy===m.gy);
             if(item)this._pickup(m,item);
         }
-        this._updateVisibility(); this._drawFog();
+        this._updateVisibility();this._drawFog();
         this._processEnemies();
         this._uiUpdate();
         this.state='WAITING';
@@ -275,13 +312,13 @@ class GameScene extends Phaser.Scene {
     _processEnemies(){
         for(const e of this.enemies){
             if(!e.alive)continue;
-            const n=this._nearestParty(e); if(!n)continue;
+            const n=this._nearestParty(e);if(!n)continue;
             const dist=Math.abs(e.gx-n.gx)+Math.abs(e.gy-n.gy);
             if(dist===1){this._combat(e,n);}
             else if(dist<=8){
                 const next=bfsStep(this.dungeon.tiles,{x:e.gx,y:e.gy},{x:n.gx,y:n.gy},CFG.MAP_W,CFG.MAP_H);
                 if(next&&!this.occupied.has(`${next.x},${next.y}`))this._move(e,next.x,next.y);
-            } else if(Math.random()<0.4){
+            }else if(Math.random()<0.4){
                 const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
                 const[ddx,ddy]=dirs[Math.floor(Math.random()*4)];
                 const nx=e.gx+ddx,ny=e.gy+ddy;
@@ -294,14 +331,12 @@ class GameScene extends Phaser.Scene {
         const dmg=Math.max(1,atk.atk-Math.floor(def.def/2)+Phaser.Math.Between(-2,3));
         def.hp=Math.max(0,def.hp-dmg);
         this._log(`${atk.name} → ${def.name}: ${dmg} dmg (HP ${def.hp}/${def.maxHp})`);
-        this._showHit(def,dmg);
-        this._updateHPBar(def);
+        this._showHit(def,dmg);this._updateHPBar(def);
         if(def.hp===0){this._log(`¡${def.name} se debilitó!`);this._removeEntity(def);}
     }
 
     _removeEntity(entity){
-        entity.alive=false;
-        entity.sprite.setVisible(false);
+        entity.alive=false;entity.sprite.setVisible(false);
         this.occupied.delete(`${entity.gx},${entity.gy}`);
         if(entity.isEnemy){this.enemies=this.enemies.filter(e=>e!==entity);return;}
         this.party=this.party.filter(p=>p!==entity);
@@ -311,13 +346,12 @@ class GameScene extends Phaser.Scene {
     }
 
     _pickup(member,item){
-        item.alive=false; item.sprite.setVisible(false);
+        item.alive=false;item.sprite.setVisible(false);
         this.items=this.items.filter(i=>i!==item);
-        let heal=0;
-        if(item.itemType==='berry') heal=Math.min(10,member.maxHp-member.hp);
-        else heal=Math.min(Math.floor(member.maxHp*0.3),member.maxHp-member.hp);
+        const isBerry=item.itemType==='berry';
+        const heal=isBerry?Math.min(10,member.maxHp-member.hp):Math.min(Math.floor(member.maxHp*0.3),member.maxHp-member.hp);
         member.hp+=heal;
-        this._log(`${member.name} recogió ${item.itemType==='berry'?'Baya Oran':'Elixir'}. +${heal} HP (${member.hp}/${member.maxHp})`);
+        this._log(`${member.name} recogió ${isBerry?'Baya Oran':'Elixir'}. +${heal} HP (${member.hp}/${member.maxHp})`);
         this._updateHPBar(member);
     }
 
@@ -325,14 +359,8 @@ class GameScene extends Phaser.Scene {
         if(this.floor>=CFG.MAX_FLOORS){this._victory();return;}
         this.scene.restart({floor:this.floor+1,savedParty:this.party.filter(p=>p.alive).map(p=>({key:p.key,hp:p.hp,maxHp:p.maxHp}))});
     }
-    _gameOver(){
-        this.transitioning=true;
-        this.time.delayedCall(1200,()=>{this.scene.stop('UIScene');this.scene.start('GameOverScene');});
-    }
-    _victory(){
-        this.transitioning=true;
-        this.time.delayedCall(800,()=>{this.scene.stop('UIScene');this.scene.start('VictoryScene');});
-    }
+    _gameOver(){this.transitioning=true;this.time.delayedCall(1200,()=>{this.scene.stop('UIScene');this.scene.start('GameOverScene');});}
+    _victory(){this.transitioning=true;this.time.delayedCall(800,()=>{this.scene.stop('UIScene');this.scene.start('VictoryScene');});}
 
     _updateVisibility(){
         const{rooms}=this.dungeon,H=CFG.MAP_H,W=CFG.MAP_W,leader=this.party[0];
@@ -351,8 +379,7 @@ class GameScene extends Phaser.Scene {
     }
 
     _drawFog(){
-        const TS=CFG.TILE,g=this.fogGfx;
-        g.clear();
+        const TS=CFG.TILE,g=this.fogGfx;g.clear();
         for(let y=0;y<CFG.MAP_H;y++)for(let x=0;x<CFG.MAP_W;x++){
             if(!this.visible[y][x]){g.fillStyle(0x000000,this.revealed[y][x]?0.6:1);g.fillRect(x*TS,y*TS,TS,TS);}
         }
@@ -368,7 +395,7 @@ class GameScene extends Phaser.Scene {
             const key=saved.key,d=POKEMON[key],pos=this._freeFloor(startX,startY,placed);
             placed.push(pos);
             const entity=this._makeEntity(pos.x,pos.y,key,d,false,i===0);
-            entity.hp=(saved.hp!==null&&saved.hp!==undefined)?saved.hp:d.hp;
+            entity.hp=(saved.hp!=null)?saved.hp:d.hp;
             this._updateHPBar(entity);
             return entity;
         });
@@ -377,16 +404,14 @@ class GameScene extends Phaser.Scene {
         this.enemies=[];
         for(const e of this.dungeon.enemies){
             if(this.occupied.has(`${e.x},${e.y}`))continue;
-            const d=POKEMON[e.key];
-            this.enemies.push(this._makeEntity(e.x,e.y,e.key,d,true,false));
+            this.enemies.push(this._makeEntity(e.x,e.y,e.key,POKEMON[e.key],true,false));
         }
     }
     _spawnItems(){
         this.items=[];
         for(const it of this.dungeon.items){
             if(this.occupied.has(`${it.x},${it.y}`))continue;
-            const color=it.type==='berry'?0x33bb44:0x33aaee;
-            const label=it.type==='berry'?'♦':'✦';
+            const color=it.type==='berry'?0x33bb44:0x33aaee,label=it.type==='berry'?'♦':'✦';
             const sprite=this.add.container(it.x*CFG.TILE+CFG.TILE/2,it.y*CFG.TILE+CFG.TILE/2).setDepth(3);
             sprite.add([this.add.rectangle(0,0,CFG.TILE-10,CFG.TILE-10,color,0.85),
                         this.add.text(0,0,label,{fontSize:'13px',color:'#fff'}).setOrigin(0.5)]);
@@ -407,14 +432,29 @@ class GameScene extends Phaser.Scene {
         const hpBg=this.add.rectangle(0,-r-5,barW,4,0x222222);
         const hpFg=this.add.rectangle(-barW/2,-r-5,barW,4,0x44ee44).setOrigin(0,0.5);
         sprite.add([outline,body,letter,hpBg,hpFg]);
-        const entity={key,name:data.name,isEnemy,gx,gy,alive:true,hp:data.hp,maxHp:data.hp,atk:data.atk,def:data.def,sprite,hpFg,hpBarW:barW};
+        // Facing indicator dot (party only)
+        let facingDot=null;
+        if(!isEnemy){facingDot=this.add.circle(0,r-3,3,0xffffff,0.9);sprite.add(facingDot);}
+        const entity={key,name:data.name,isEnemy,gx,gy,alive:true,hp:data.hp,maxHp:data.hp,atk:data.atk,def:data.def,sprite,hpFg,hpBarW:barW,facingDx:0,facingDy:1,facingDot};
         this.occupied.set(`${gx},${gy}`,entity);
         return entity;
     }
 
+    _setFacing(entity,dx,dy){
+        entity.facingDx=dx;entity.facingDy=dy;
+        if(entity.facingDot){const d=CFG.TILE/2-4;entity.facingDot.setPosition(dx*d,dy*d);}
+    }
+
+    _swapEntities(a,b){
+        this.occupied.delete(`${a.gx},${a.gy}`);this.occupied.delete(`${b.gx},${b.gy}`);
+        [a.gx,b.gx]=[b.gx,a.gx];[a.gy,b.gy]=[b.gy,a.gy];
+        this.occupied.set(`${a.gx},${a.gy}`,a);this.occupied.set(`${b.gx},${b.gy}`,b);
+        a.sprite.setPosition(a.gx*CFG.TILE+CFG.TILE/2,a.gy*CFG.TILE+CFG.TILE/2);
+        b.sprite.setPosition(b.gx*CFG.TILE+CFG.TILE/2,b.gy*CFG.TILE+CFG.TILE/2);
+    }
+
     _updateHPBar(e){
-        if(!e.hpFg)return;
-        const r=e.hp/e.maxHp;
+        if(!e.hpFg)return;const r=e.hp/e.maxHp;
         e.hpFg.width=e.hpBarW*r;
         e.hpFg.fillColor=r>0.5?0x44ee44:r>0.25?0xffcc00:0xff3333;
     }
@@ -430,24 +470,15 @@ class GameScene extends Phaser.Scene {
     _buildTextures(TS){
         if(this.textures.exists('t_wall'))return;
         const g=this.make.graphics({x:0,y:0,add:false});
-        g.fillStyle(CFG.COLORS.WALL);g.fillRect(0,0,TS,TS);
-        g.fillStyle(CFG.COLORS.WALL_SHADE,0.5);g.fillRect(2,2,TS-4,TS-4);
-        g.generateTexture('t_wall',TS,TS);
-        g.clear();g.fillStyle(CFG.COLORS.FLOOR);g.fillRect(0,0,TS,TS);
-        g.fillStyle(CFG.COLORS.FLOOR_SHADE,0.25);g.fillRect(1,1,TS-2,TS-2);
-        g.generateTexture('t_floor',TS,TS);
-        g.clear();g.fillStyle(CFG.COLORS.CORRIDOR);g.fillRect(0,0,TS,TS);
-        g.generateTexture('t_corridor',TS,TS);
-        g.clear();g.fillStyle(CFG.COLORS.FLOOR);g.fillRect(0,0,TS,TS);
-        g.fillStyle(CFG.COLORS.STAIRS_FG);
-        const cx=TS/2;
-        [0,1,2,3].forEach(i=>{const sw=TS-8-i*4;g.fillRect(cx-sw/2,4+i*6,sw,4);});
-        g.generateTexture('t_stairs',TS,TS);
-        g.destroy();
+        g.fillStyle(CFG.COLORS.WALL);g.fillRect(0,0,TS,TS);g.fillStyle(CFG.COLORS.WALL_SHADE,0.5);g.fillRect(2,2,TS-4,TS-4);g.generateTexture('t_wall',TS,TS);
+        g.clear();g.fillStyle(CFG.COLORS.FLOOR);g.fillRect(0,0,TS,TS);g.fillStyle(CFG.COLORS.FLOOR_SHADE,0.25);g.fillRect(1,1,TS-2,TS-2);g.generateTexture('t_floor',TS,TS);
+        g.clear();g.fillStyle(CFG.COLORS.CORRIDOR);g.fillRect(0,0,TS,TS);g.generateTexture('t_corridor',TS,TS);
+        g.clear();g.fillStyle(CFG.COLORS.FLOOR);g.fillRect(0,0,TS,TS);g.fillStyle(CFG.COLORS.STAIRS_FG);
+        const cx=TS/2;[0,1,2,3].forEach(i=>{const sw=TS-8-i*4;g.fillRect(cx-sw/2,4+i*6,sw,4);});
+        g.generateTexture('t_stairs',TS,TS);g.destroy();
     }
     _renderDungeon(){
-        const TS=CFG.TILE;
-        const km={[CFG.T.WALL]:'t_wall',[CFG.T.FLOOR]:'t_floor',[CFG.T.CORRIDOR]:'t_corridor',[CFG.T.STAIRS]:'t_stairs'};
+        const TS=CFG.TILE,km={[CFG.T.WALL]:'t_wall',[CFG.T.FLOOR]:'t_floor',[CFG.T.CORRIDOR]:'t_corridor',[CFG.T.STAIRS]:'t_stairs'};
         for(let y=0;y<CFG.MAP_H;y++)for(let x=0;x<CFG.MAP_W;x++)
             this.add.image(x*TS,y*TS,km[this.dungeon.tiles[y][x]]||'t_wall').setOrigin(0,0).setDepth(0);
     }
@@ -456,8 +487,7 @@ class GameScene extends Phaser.Scene {
     _walkable(x,y){return this._inBounds(x,y)&&this.dungeon.tiles[y][x]!==CFG.T.WALL;}
     _move(entity,nx,ny){
         this.occupied.delete(`${entity.gx},${entity.gy}`);
-        entity.gx=nx;entity.gy=ny;
-        this.occupied.set(`${nx},${ny}`,entity);
+        entity.gx=nx;entity.gy=ny;this.occupied.set(`${nx},${ny}`,entity);
         entity.sprite.setPosition(nx*CFG.TILE+CFG.TILE/2,ny*CFG.TILE+CFG.TILE/2);
     }
     _snap(){return this.party.map(p=>({x:p.gx,y:p.gy}));}
@@ -472,13 +502,15 @@ class GameScene extends Phaser.Scene {
     }
     _freeFloor(cx,cy,exclude){
         const offs=[[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1],[2,0],[-2,0],[0,2],[0,-2]];
-        for(const[dx,dy]of offs){
-            const x=cx+dx,y=cy+dy,k=`${x},${y}`;
-            if(this._walkable(x,y)&&!this.occupied.has(k)&&!exclude.some(p=>p.x===x&&p.y===y))return{x,y};
-        }
+        for(const[dx,dy]of offs){const x=cx+dx,y=cy+dy,k=`${x},${y}`;
+            if(this._walkable(x,y)&&!this.occupied.has(k)&&!exclude.some(p=>p.x===x&&p.y===y))return{x,y};}
         return{x:cx,y:cy};
     }
-    _uiUpdate(){const ui=this.scene.get('UIScene');if(!ui?.sys.isActive())return;ui.updateParty(this.party);ui.updateFloor(this.floor);}
+    _uiUpdate(){
+        const ui=this.scene.get('UIScene');if(!ui?.sys.isActive())return;
+        ui.updateParty(this.party);ui.updateFloor(this.floor);
+        ui.updateMinimap(this.revealed,this.visible,this.dungeon.tiles,this.party,this.enemies);
+    }
     _uiFloor(){const ui=this.scene.get('UIScene');if(!ui?.sys.isActive())return;ui.updateFloor(this.floor);}
     _log(msg){const ui=this.scene.get('UIScene');if(ui?.sys.isActive())ui.addLog(msg);}
 }
@@ -491,34 +523,47 @@ class UIScene extends Phaser.Scene {
     create(){
         const W=CFG.WIDTH,H=CFG.HEIGHT;
         this.cameras.main.setViewport(0,0,W,H);
-        // Party panel
-        this.add.rectangle(90,69,180,130,0x000000,0.7);
+
+        // ── Party panel ──────────────────────────────────────────────────
+        this.add.rectangle(90,69,180,130,0x000000,0.72);
         this.add.rectangle(90,69,180,130,0x224466,0.1).setStrokeStyle(1,0x334466,0.8);
         this.add.text(8,8,'EQUIPO',{fontSize:'11px',color:'#aabbcc',fontStyle:'bold'});
         this.partyRows=[];
         for(let i=0;i<3;i++){
             const y=26+i*36;
-            const dot=this.add.circle(14,y+9,8,0x445566);
-            const lbl=this.add.text(26,y,'—',{fontSize:'11px',color:'#ccddee',fontStyle:'bold'});
+            const dot  =this.add.circle(14,y+9,8,0x445566);
+            const lbl  =this.add.text(26,y,'—',{fontSize:'11px',color:'#ccddee',fontStyle:'bold'});
             const hpTxt=this.add.text(26,y+13,'',{fontSize:'10px',color:'#88aabb'});
             const barBg=this.add.rectangle(50,y+17,80,5,0x222222).setOrigin(0,0.5);
             const barFg=this.add.rectangle(50,y+17,80,5,0x44ee44).setOrigin(0,0.5);
             this.partyRows.push({dot,lbl,hpTxt,barBg,barFg,barMaxW:80});
         }
-        // Floor
-        this.add.rectangle(W-80,18,130,28,0x000000,0.7).setStrokeStyle(1,0x334466,0.8);
+
+        // ── Minimap ──────────────────────────────────────────────────────
+        this.mmTS=3;this.mmX=6;this.mmY=152;
+        const mmW=CFG.MAP_W*this.mmTS,mmH=CFG.MAP_H*this.mmTS;
+        this.add.rectangle(this.mmX+mmW/2,this.mmY-9,mmW+4,14,0x000000,0.8);
+        this.add.text(this.mmX+mmW/2,this.mmY-9,'MAPA EXPLORADO',{fontSize:'9px',color:'#7788aa'}).setOrigin(0.5);
+        this.add.rectangle(this.mmX+mmW/2,this.mmY+mmH/2,mmW+2,mmH+2,0x000000,0.8).setStrokeStyle(1,0x334466,0.7);
+        this.mmGfx=this.add.graphics();
+
+        // ── Floor indicator ──────────────────────────────────────────────
+        this.add.rectangle(W-80,18,130,28,0x000000,0.72).setStrokeStyle(1,0x334466,0.8);
         this.floorText=this.add.text(W-80,18,'PISO  1 / 10',{fontSize:'13px',color:'#ffd700',fontStyle:'bold'}).setOrigin(0.5);
-        // Log
-        const logH=100,logW=W-200;
-        this.add.rectangle(logW/2+190,H-logH/2,logW,logH,0x000000,0.75);
-        this.logLines=[];
-        this.logTexts=[];
+
+        // ── Message log ──────────────────────────────────────────────────
+        const logH=100,logW=W-196;
+        this.add.rectangle(logW/2+194,H-logH/2,logW,logH,0x000000,0.76);
+        this.logLines=[];this.logTexts=[];
         for(let i=0;i<4;i++){
-            const t=this.add.text(200,H-logH+8+i*22,'',{fontSize:'12px',color:'#ccddee',wordWrap:{width:logW-20}});
-            t.setAlpha(1-i*0.2);
-            this.logTexts.push(t);
+            const t=this.add.text(198,H-logH+8+i*22,'',{fontSize:'12px',color:'#ccddee',wordWrap:{width:logW-16}});
+            t.setAlpha(1-i*0.2);this.logTexts.push(t);
         }
+
+        // ── Controls hint ─────────────────────────────────────────────────
+        this.add.text(W-8,H-logH-4,'Z = Atacar  •  SPACE = Esperar',{fontSize:'9px',color:'#445566'}).setOrigin(1,1);
     }
+
     updateParty(party){
         for(let i=0;i<3;i++){
             const row=this.partyRows[i],member=party[i];
@@ -531,7 +576,36 @@ class UIScene extends Phaser.Scene {
             row.barFg.fillColor=ratio>0.5?0x44ee44:ratio>0.25?0xffcc00:0xff3333;
         }
     }
+
     updateFloor(floor){this.floorText.setText(`PISO  ${floor} / ${CFG.MAX_FLOORS}`);}
+
+    updateMinimap(revealed,visible,tiles,party,enemies){
+        if(!this.mmGfx||!revealed)return;
+        const TS=this.mmTS,X=this.mmX,Y=this.mmY,g=this.mmGfx;
+        g.clear();
+        for(let y=0;y<CFG.MAP_H;y++){
+            for(let x=0;x<CFG.MAP_W;x++){
+                if(!revealed[y][x])continue;
+                const t=tiles[y][x],vis=visible[y][x];
+                let col;
+                if(t===CFG.T.WALL)col=vis?0x2d4466:0x1a2a44;
+                else if(t===CFG.T.STAIRS)col=0xffd700;
+                else col=vis?0x7a5a40:0x4a3220;
+                g.fillStyle(col,1);g.fillRect(X+x*TS,Y+y*TS,TS,TS);
+            }
+        }
+        // Enemies only when currently visible (no omniscient radar)
+        for(const e of enemies){
+            if(!e.alive||!visible?.[e.gy]?.[e.gx])continue;
+            g.fillStyle(0xff4444,1);g.fillRect(X+e.gx*TS,Y+e.gy*TS,TS,TS);
+        }
+        // Party: leader=white, followers=cyan
+        for(let i=party.length-1;i>=0;i--){
+            const m=party[i];if(!m.alive)continue;
+            g.fillStyle(i===0?0xffffff:0x44ddff,1);g.fillRect(X+m.gx*TS,Y+m.gy*TS,TS,TS);
+        }
+    }
+
     addLog(msg){
         this.logLines.unshift(msg);
         if(this.logLines.length>this.logTexts.length)this.logLines.pop();
@@ -584,13 +658,12 @@ class VictoryScene extends Phaser.Scene {
 //  PHASER INIT
 // ══════════════════════════════════════════════════════════════════════════════
 new Phaser.Game({
-    type: Phaser.AUTO,
-    width: CFG.WIDTH, height: CFG.HEIGHT,
-    backgroundColor: '#000000',
-    scene: [MenuScene, GameScene, UIScene, GameOverScene, VictoryScene],
-    parent: document.body,
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    render: { antialias: false, roundPixels: true },
+    type:Phaser.AUTO, width:CFG.WIDTH, height:CFG.HEIGHT,
+    backgroundColor:'#000000',
+    scene:[MenuScene,GameScene,UIScene,GameOverScene,VictoryScene],
+    parent:document.body,
+    scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
+    render:{antialias:false,roundPixels:true},
 });
 </script>
 </body>

@@ -22,6 +22,6 @@ const CFG = {
         PARTY_LEADER: 0xffd700,
     },
 
-    SIGHT_RADIUS: 2,
+    SIGHT_RADIUS: 4,
     MOVE_DELAY: 160,
 };

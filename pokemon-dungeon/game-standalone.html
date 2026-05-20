@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pokémon Mystery Dungeon — Torre del Tiempo</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════════════════════════════════════════
+const CFG = {
+    TILE: 32, MAP_W: 56, MAP_H: 44, WIDTH: 896, HEIGHT: 640, MAX_FLOORS: 10,
+    T: { WALL: 0, FLOOR: 1, CORRIDOR: 2, STAIRS: 3 },
+    COLORS: {
+        WALL: 0x16213e, WALL_SHADE: 0x0d1530,
+        FLOOR: 0x3d2b1f, FLOOR_SHADE: 0x2d1f14,
+        CORRIDOR: 0x2a1e13, STAIRS_FG: 0xffd700,
+        PARTY_LEADER: 0xffd700,
+    },
+    SIGHT_RADIUS: 2, MOVE_DELAY: 160,
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  POKEMON DATA
+// ══════════════════════════════════════════════════════════════════════════════
+const POKEMON = {
+    bulbasaur:  { name:'Bulbasaur',  type:'Planta',  hp:45, atk:49, def:49, color:0x5ca935, letter:'B' },
+    charmander: { name:'Charmander', type:'Fuego',   hp:39, atk:52, def:43, color:0xf07030, letter:'C' },
+    squirtle:   { name:'Squirtle',   type:'Agua',    hp:44, atk:48, def:65, color:0x4870d0, letter:'S' },
+    rattata:    { name:'Rattata',    type:'Normal',  hp:30, atk:56, def:35, color:0x9050a0, letter:'R', isEnemy:true, floors:[1,4] },
+    pidgey:     { name:'Pidgey',     type:'Volador', hp:40, atk:45, def:40, color:0xb08820, letter:'P', isEnemy:true, floors:[1,5] },
+    geodude:    { name:'Geodude',    type:'Roca',    hp:40, atk:80, def:100,color:0x806040, letter:'G', isEnemy:true, floors:[3,8] },
+    ekans:      { name:'Ekans',      type:'Veneno',  hp:35, atk:60, def:44, color:0x6050a0, letter:'E', isEnemy:true, floors:[2,7] },
+    machop:     { name:'Machop',     type:'Lucha',   hp:70, atk:80, def:50, color:0x8030d0, letter:'M', isEnemy:true, floors:[5,10] },
+    gastly:     { name:'Gastly',     type:'Fantasma',hp:30, atk:35, def:30, color:0x504070, letter:'G', isEnemy:true, floors:[6,10] },
+    growlithe:  { name:'Growlithe',  type:'Fuego',   hp:55, atk:70, def:45, color:0xe06020, letter:'G', isEnemy:true, floors:[4,9] },
+    tentacool:  { name:'Tentacool',  type:'Agua',    hp:40, atk:40, def:35, color:0x2080c0, letter:'T', isEnemy:true, floors:[3,8] },
+};
+const ENEMY_KEYS = ['rattata','pidgey','geodude','ekans','machop','gastly','growlithe','tentacool'];
+function getEnemiesForFloor(floor) {
+    return ENEMY_KEYS.filter(k => { const [mn,mx]=POKEMON[k].floors; return floor>=mn&&floor<=mx; });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  DUNGEON GENERATOR + BFS
+// ══════════════════════════════════════════════════════════════════════════════
+class DungeonGen {
+    constructor(w, h) { this.w = w; this.h = h; }
+    generate(floor) {
+        const tiles = Array.from({length:this.h}, () => new Array(this.w).fill(CFG.T.WALL));
+        const rooms = [];
+        for (let attempt = 0; attempt < 300 && rooms.length < 12; attempt++) {
+            const rw = 5 + Math.floor(Math.random() * 8);
+            const rh = 4 + Math.floor(Math.random() * 6);
+            const rx = 1 + Math.floor(Math.random() * (this.w - rw - 2));
+            const ry = 1 + Math.floor(Math.random() * (this.h - rh - 2));
+            const overlaps = rooms.some(r => rx<r.x+r.w+2 && rx+rw+2>r.x && ry<r.y+r.h+2 && ry+rh+2>r.y);
+            if (!overlaps) {
+                rooms.push({x:rx,y:ry,w:rw,h:rh});
+                for (let y=ry; y<ry+rh; y++) for (let x=rx; x<rx+rw; x++) tiles[y][x]=CFG.T.FLOOR;
+            }
+        }
+        if (rooms.length < 2) return this.generate(floor);
+        for (let i = 1; i < rooms.length; i++) {
+            const a=rooms[i-1], b=rooms[i];
+            const ax=(a.x+a.w/2)|0, ay=(a.y+a.h/2)|0, bx=(b.x+b.w/2)|0, by=(b.y+b.h/2)|0;
+            if (Math.random()<0.5) { hCor(tiles,ax,bx,ay); vCor(tiles,ay,by,bx); }
+            else                   { vCor(tiles,ay,by,ax); hCor(tiles,ax,bx,by); }
+        }
+        const last=rooms[rooms.length-1];
+        const sx=(last.x+last.w/2)|0, sy=(last.y+last.h/2)|0;
+        tiles[sy][sx]=CFG.T.STAIRS;
+        const first=rooms[0];
+        const startX=(first.x+first.w/2)|0, startY=(first.y+first.h/2)|0;
+        const available=getEnemiesForFloor(floor);
+        const enemies=[];
+        for (let i=0; i<Math.min(3+floor*2,18); i++) {
+            const ri=1+Math.floor(Math.random()*(rooms.length-1));
+            const r=rooms[ri];
+            const ex=r.x+Math.floor(Math.random()*r.w), ey=r.y+Math.floor(Math.random()*r.h);
+            if (!(ex===sx&&ey===sy) && available.length>0)
+                enemies.push({x:ex,y:ey,key:available[Math.floor(Math.random()*available.length)]});
+        }
+        const items=[];
+        for (let i=0; i<2+Math.floor(Math.random()*4); i++) {
+            const r=rooms[Math.floor(Math.random()*rooms.length)];
+            items.push({x:r.x+Math.floor(Math.random()*r.w), y:r.y+Math.floor(Math.random()*r.h),
+                        type:Math.random()<0.65?'berry':'elixir'});
+        }
+        return {tiles,rooms,startX,startY,enemies,items};
+    }
+}
+function hCor(t,x1,x2,y){const[a,b]=x1<x2?[x1,x2]:[x2,x1]; for(let x=a;x<=b;x++) if(t[y][x]===CFG.T.WALL)t[y][x]=CFG.T.CORRIDOR;}
+function vCor(t,y1,y2,x){const[a,b]=y1<y2?[y1,y2]:[y2,y1]; for(let y=a;y<=b;y++) if(t[y][x]===CFG.T.WALL)t[y][x]=CFG.T.CORRIDOR;}
+function bfsStep(tiles,from,to,w,h){
+    if(Math.abs(from.x-to.x)+Math.abs(from.y-to.y)>12)return null;
+    const queue=[from], visited=new Map();
+    visited.set(`${from.x},${from.y}`,null);
+    while(queue.length>0){
+        const curr=queue.shift();
+        if(curr.x===to.x&&curr.y===to.y){
+            let node=curr;
+            while(visited.get(`${node.x},${node.y}`)!==null){
+                const prev=visited.get(`${node.x},${node.y}`);
+                if(prev.x===from.x&&prev.y===from.y)return node;
+                node=prev;
+            }
+            return null;
+        }
+        for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){
+            const nx=curr.x+dx,ny=curr.y+dy,k=`${nx},${ny}`;
+            if(nx>=0&&ny>=0&&nx<w&&ny<h&&tiles[ny][nx]!==CFG.T.WALL&&!visited.has(k)){
+                visited.set(k,curr); queue.push({x:nx,y:ny});
+            }
+        }
+    }
+    return null;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  MENU SCENE
+// ══════════════════════════════════════════════════════════════════════════════
+class MenuScene extends Phaser.Scene {
+    constructor(){super({key:'MenuScene'});}
+    create(){
+        const W=CFG.WIDTH,H=CFG.HEIGHT;
+        this.add.rectangle(W/2,H/2,W,H,0x0d1117);
+        for(let i=0;i<5;i++) this.add.rectangle(W/2,H/2,W,H-i*80,0x16213e,0.15*(5-i));
+        for(let i=0;i<60;i++){
+            const x=Math.random()*W,y=Math.random()*H*0.6,r=Math.random()<0.8?1:2;
+            this.add.circle(x,y,r,0xffffff,Math.random()*0.6+0.2);
+        }
+        this.add.text(W/2,72,'POKÉMON',{fontSize:'52px',color:'#ffd700',fontStyle:'bold',stroke:'#b8860b',strokeThickness:5}).setOrigin(0.5);
+        this.add.text(W/2,130,'MYSTERY DUNGEON',{fontSize:'30px',color:'#ffffff',fontStyle:'bold',stroke:'#555',strokeThickness:3}).setOrigin(0.5);
+        this.add.text(W/2,168,'— Torre del Tiempo —',{fontSize:'16px',color:'#aaaaaa',fontStyle:'italic'}).setOrigin(0.5);
+        this.add.text(W/2,218,'Tu equipo de exploración',{fontSize:'17px',color:'#e0e0e0'}).setOrigin(0.5);
+        const starters=['bulbasaur','charmander','squirtle'];
+        const xs=[W/2-220,W/2,W/2+220];
+        starters.forEach((key,i)=>{
+            const d=POKEMON[key],x=xs[i],y=310;
+            this.add.rectangle(x,y,150,140,0x1a2744,0.9);
+            this.add.rectangle(x,y,150,140,i===0?0xffd700:0x444466,0.4).setStrokeStyle(2,i===0?0xffd700:0x446688);
+            this.add.text(x,y-56,i===0?'★ LÍDER':`Aliado ${i}`,{fontSize:'11px',color:i===0?'#ffd700':'#8888aa',fontStyle:'bold'}).setOrigin(0.5);
+            this.add.circle(x,y-22,32,d.color,0.9);
+            this.add.circle(x,y-22,26,d.color);
+            this.add.text(x,y-22,d.letter,{fontSize:'26px',color:'#fff',fontStyle:'bold'}).setOrigin(0.5);
+            this.add.text(x,y+20,d.name,{fontSize:'13px',color:'#e0e0e0',fontStyle:'bold'}).setOrigin(0.5);
+            this.add.text(x,y+36,`Tipo: ${d.type}`,{fontSize:'11px',color:'#aaaacc'}).setOrigin(0.5);
+            this.add.text(x,y+52,`HP ${d.hp}  ATK ${d.atk}  DEF ${d.def}`,{fontSize:'10px',color:'#888888'}).setOrigin(0.5);
+        });
+        this.add.rectangle(W/2,462,600,86,0x111a2a,0.9);
+        ['↑↓←→ / WASD → Mover líder    •    SPACE → Esperar turno',
+         'Camina hacia un enemigo para atacarlo',
+         'Los aliados siguen automáticamente    •    ▼ escaleras = siguiente piso'
+        ].forEach((t,i)=>this.add.text(W/2,442+i*22,t,{fontSize:'12px',color:'#888899'}).setOrigin(0.5));
+        const btnBg=this.add.rectangle(W/2,540,280,48,0x1e5628).setInteractive({cursor:'pointer'});
+        const btnTxt=this.add.text(W/2,540,'¡COMENZAR AVENTURA!',{fontSize:'16px',color:'#ffffff',fontStyle:'bold'}).setOrigin(0.5);
+        btnBg.on('pointerover',()=>{btnBg.setFillStyle(0x2a7a38);btnTxt.setColor('#ffd700');});
+        btnBg.on('pointerout', ()=>{btnBg.setFillStyle(0x1e5628);btnTxt.setColor('#ffffff');});
+        btnBg.on('pointerdown',()=>this._go());
+        this.add.text(W/2,575,'o presiona ENTER',{fontSize:'12px',color:'#555566'}).setOrigin(0.5);
+        this.input.keyboard.on('keydown-ENTER',()=>this._go());
+        this.tweens.add({targets:btnBg,scaleX:1.02,scaleY:1.02,duration:900,yoyo:true,repeat:-1});
+    }
+    _go(){this.scene.stop('UIScene');this.scene.start('GameScene',{floor:1});}
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  GAME SCENE
+// ══════════════════════════════════════════════════════════════════════════════
+class GameScene extends Phaser.Scene {
+    constructor(){super({key:'GameScene'});}
+    init(data){this.floor=data.floor||1; this.savedParty=data.savedParty||null;}
+
+    create(){
+        const TS=CFG.TILE;
+        this.gen=new DungeonGen(CFG.MAP_W,CFG.MAP_H);
+        this.dungeon=this.gen.generate(this.floor);
+        this.revealed=Array.from({length:CFG.MAP_H},()=>new Array(CFG.MAP_W).fill(false));
+        this.visible =Array.from({length:CFG.MAP_H},()=>new Array(CFG.MAP_W).fill(false));
+        this.occupied=new Map();
+        this._buildTextures(TS);
+        this._renderDungeon();
+        this.fogGfx=this.add.graphics().setDepth(20);
+        this._spawnParty();
+        this._spawnEnemies();
+        this._spawnItems();
+        this.cameras.main.setBounds(0,0,CFG.MAP_W*TS,CFG.MAP_H*TS);
+        this.cameras.main.startFollow(this.party[0].sprite,true,0.1,0.1);
+        this.cursors=this.input.keyboard.createCursorKeys();
+        this.wasd=this.input.keyboard.addKeys({
+            up:Phaser.Input.Keyboard.KeyCodes.W, down:Phaser.Input.Keyboard.KeyCodes.S,
+            left:Phaser.Input.Keyboard.KeyCodes.A, right:Phaser.Input.Keyboard.KeyCodes.D,
+            wait:Phaser.Input.Keyboard.KeyCodes.SPACE,
+        });
+        this.state='WAITING'; this.moveTimer=0; this.transitioning=false;
+        this._updateVisibility(); this._drawFog();
+        if(!this.scene.isActive('UIScene'))this.scene.launch('UIScene');
+        this.time.delayedCall(80,()=>{this._uiUpdate();this._uiFloor();});
+    }
+
+    update(time){
+        if(this.state!=='WAITING'||this.transitioning)return;
+        if(time<this.moveTimer)return;
+        const C=this.cursors,W=this.wasd;
+        let dx=0,dy=0;
+        if     (C.left.isDown ||W.left.isDown) dx=-1;
+        else if(C.right.isDown||W.right.isDown)dx= 1;
+        else if(C.up.isDown   ||W.up.isDown)   dy=-1;
+        else if(C.down.isDown ||W.down.isDown) dy= 1;
+        else if(Phaser.Input.Keyboard.JustDown(W.wait)){this.moveTimer=time+CFG.MOVE_DELAY;this._processTurn(null);return;}
+        else return;
+        this.moveTimer=time+CFG.MOVE_DELAY;
+        this._tryMoveLeader(dx,dy);
+    }
+
+    _tryMoveLeader(dx,dy){
+        const leader=this.party[0];
+        const nx=leader.gx+dx, ny=leader.gy+dy;
+        if(!this._inBounds(nx,ny))return;
+        const tile=this.dungeon.tiles[ny][nx];
+        if(tile===CFG.T.WALL)return;
+        for(let i=1;i<this.party.length;i++)if(this.party[i].gx===nx&&this.party[i].gy===ny)return;
+        const occ=this.occupied.get(`${nx},${ny}`);
+        if(occ&&occ.isEnemy){
+            const prev=this._snap();
+            this._combat(leader,occ);
+            this._processTurn(prev);
+            return;
+        }
+        const prev=this._snap();
+        this._move(leader,nx,ny);
+        if(tile===CFG.T.STAIRS){
+            this._log(`¡${leader.name} encontró las escaleras! Bajando al Piso ${this.floor+1}...`);
+            this.transitioning=true;
+            this.time.delayedCall(600,()=>this._nextFloor());
+            return;
+        }
+        this._processTurn(prev);
+    }
+
+    _processTurn(prevPos){
+        this.state='PROCESSING';
+        if(prevPos){
+            for(let i=1;i<this.party.length;i++){
+                const f=this.party[i]; if(!f.alive)continue;
+                const tgt=prevPos[i-1];
+                if(!this.occupied.has(`${tgt.x},${tgt.y}`))this._move(f,tgt.x,tgt.y);
+            }
+        }
+        for(const m of this.party){
+            if(!m.alive)continue;
+            const adj=this._adjEnemies(m);
+            if(adj.length>0)this._combat(m,adj[0]);
+        }
+        for(const m of this.party){
+            if(!m.alive)continue;
+            const item=this.items.find(it=>it.alive&&it.gx===m.gx&&it.gy===m.gy);
+            if(item)this._pickup(m,item);
+        }
+        this._updateVisibility(); this._drawFog();
+        this._processEnemies();
+        this._uiUpdate();
+        this.state='WAITING';
+    }
+
+    _processEnemies(){
+        for(const e of this.enemies){
+            if(!e.alive)continue;
+            const n=this._nearestParty(e); if(!n)continue;
+            const dist=Math.abs(e.gx-n.gx)+Math.abs(e.gy-n.gy);
+            if(dist===1){this._combat(e,n);}
+            else if(dist<=8){
+                const next=bfsStep(this.dungeon.tiles,{x:e.gx,y:e.gy},{x:n.gx,y:n.gy},CFG.MAP_W,CFG.MAP_H);
+                if(next&&!this.occupied.has(`${next.x},${next.y}`))this._move(e,next.x,next.y);
+            } else if(Math.random()<0.4){
+                const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+                const[ddx,ddy]=dirs[Math.floor(Math.random()*4)];
+                const nx=e.gx+ddx,ny=e.gy+ddy;
+                if(this._walkable(nx,ny)&&!this.occupied.has(`${nx},${ny}`))this._move(e,nx,ny);
+            }
+        }
+    }
+
+    _combat(atk,def){
+        const dmg=Math.max(1,atk.atk-Math.floor(def.def/2)+Phaser.Math.Between(-2,3));
+        def.hp=Math.max(0,def.hp-dmg);
+        this._log(`${atk.name} → ${def.name}: ${dmg} dmg (HP ${def.hp}/${def.maxHp})`);
+        this._showHit(def,dmg);
+        this._updateHPBar(def);
+        if(def.hp===0){this._log(`¡${def.name} se debilitó!`);this._removeEntity(def);}
+    }
+
+    _removeEntity(entity){
+        entity.alive=false;
+        entity.sprite.setVisible(false);
+        this.occupied.delete(`${entity.gx},${entity.gy}`);
+        if(entity.isEnemy){this.enemies=this.enemies.filter(e=>e!==entity);return;}
+        this.party=this.party.filter(p=>p!==entity);
+        if(this.party.length===0){this._gameOver();return;}
+        this.cameras.main.startFollow(this.party[0].sprite,true,0.1,0.1);
+        this._log(`¡${this.party[0].name} toma el liderazgo!`);
+    }
+
+    _pickup(member,item){
+        item.alive=false; item.sprite.setVisible(false);
+        this.items=this.items.filter(i=>i!==item);
+        let heal=0;
+        if(item.itemType==='berry') heal=Math.min(10,member.maxHp-member.hp);
+        else heal=Math.min(Math.floor(member.maxHp*0.3),member.maxHp-member.hp);
+        member.hp+=heal;
+        this._log(`${member.name} recogió ${item.itemType==='berry'?'Baya Oran':'Elixir'}. +${heal} HP (${member.hp}/${member.maxHp})`);
+        this._updateHPBar(member);
+    }
+
+    _nextFloor(){
+        if(this.floor>=CFG.MAX_FLOORS){this._victory();return;}
+        this.scene.restart({floor:this.floor+1,savedParty:this.party.filter(p=>p.alive).map(p=>({key:p.key,hp:p.hp,maxHp:p.maxHp}))});
+    }
+    _gameOver(){
+        this.transitioning=true;
+        this.time.delayedCall(1200,()=>{this.scene.stop('UIScene');this.scene.start('GameOverScene');});
+    }
+    _victory(){
+        this.transitioning=true;
+        this.time.delayedCall(800,()=>{this.scene.stop('UIScene');this.scene.start('VictoryScene');});
+    }
+
+    _updateVisibility(){
+        const{rooms}=this.dungeon,H=CFG.MAP_H,W=CFG.MAP_W,leader=this.party[0];
+        for(let y=0;y<H;y++)for(let x=0;x<W;x++)this.visible[y][x]=false;
+        const room=rooms.find(r=>leader.gx>=r.x&&leader.gx<r.x+r.w&&leader.gy>=r.y&&leader.gy<r.y+r.h);
+        if(room){
+            for(let y=Math.max(0,room.y-1);y<Math.min(H,room.y+room.h+1);y++)
+                for(let x=Math.max(0,room.x-1);x<Math.min(W,room.x+room.w+1);x++)
+                    {this.visible[y][x]=true;this.revealed[y][x]=true;}
+        }
+        const r=CFG.SIGHT_RADIUS;
+        for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+            const tx=leader.gx+dx,ty=leader.gy+dy;
+            if(this._inBounds(tx,ty)){this.visible[ty][tx]=true;this.revealed[ty][tx]=true;}
+        }
+    }
+
+    _drawFog(){
+        const TS=CFG.TILE,g=this.fogGfx;
+        g.clear();
+        for(let y=0;y<CFG.MAP_H;y++)for(let x=0;x<CFG.MAP_W;x++){
+            if(!this.visible[y][x]){g.fillStyle(0x000000,this.revealed[y][x]?0.6:1);g.fillRect(x*TS,y*TS,TS,TS);}
+        }
+        for(const e of this.enemies)if(e.sprite)e.sprite.setVisible(e.alive&&!!(this.visible[e.gy]?.[e.gx]));
+        for(const it of this.items) if(it.sprite)it.sprite.setVisible(it.alive&&!!(this.visible[it.gy]?.[it.gx]));
+    }
+
+    _spawnParty(){
+        const{startX,startY}=this.dungeon;
+        const entries=this.savedParty||[{key:'bulbasaur',hp:null},{key:'charmander',hp:null},{key:'squirtle',hp:null}];
+        const placed=[];
+        this.party=entries.map((saved,i)=>{
+            const key=saved.key,d=POKEMON[key],pos=this._freeFloor(startX,startY,placed);
+            placed.push(pos);
+            const entity=this._makeEntity(pos.x,pos.y,key,d,false,i===0);
+            entity.hp=(saved.hp!==null&&saved.hp!==undefined)?saved.hp:d.hp;
+            this._updateHPBar(entity);
+            return entity;
+        });
+    }
+    _spawnEnemies(){
+        this.enemies=[];
+        for(const e of this.dungeon.enemies){
+            if(this.occupied.has(`${e.x},${e.y}`))continue;
+            const d=POKEMON[e.key];
+            this.enemies.push(this._makeEntity(e.x,e.y,e.key,d,true,false));
+        }
+    }
+    _spawnItems(){
+        this.items=[];
+        for(const it of this.dungeon.items){
+            if(this.occupied.has(`${it.x},${it.y}`))continue;
+            const color=it.type==='berry'?0x33bb44:0x33aaee;
+            const label=it.type==='berry'?'♦':'✦';
+            const sprite=this.add.container(it.x*CFG.TILE+CFG.TILE/2,it.y*CFG.TILE+CFG.TILE/2).setDepth(3);
+            sprite.add([this.add.rectangle(0,0,CFG.TILE-10,CFG.TILE-10,color,0.85),
+                        this.add.text(0,0,label,{fontSize:'13px',color:'#fff'}).setOrigin(0.5)]);
+            const item={gx:it.x,gy:it.y,alive:true,isItem:true,itemType:it.type,sprite};
+            this.occupied.set(`${it.x},${it.y}`,item);
+            this.items.push(item);
+        }
+    }
+
+    _makeEntity(gx,gy,key,data,isEnemy,isLeader){
+        const TS=CFG.TILE;
+        const sprite=this.add.container(gx*TS+TS/2,gy*TS+TS/2).setDepth(isEnemy?6:8);
+        const r=TS/2-3;
+        const outline=this.add.circle(0,0,r+2,isLeader?0xffd700:(isEnemy?0xaa2222:0x226688));
+        const body=this.add.circle(0,0,r,data.color);
+        const letter=this.add.text(0,1,data.letter,{fontSize:'13px',color:'#fff',fontStyle:'bold'}).setOrigin(0.5);
+        const barW=TS-6;
+        const hpBg=this.add.rectangle(0,-r-5,barW,4,0x222222);
+        const hpFg=this.add.rectangle(-barW/2,-r-5,barW,4,0x44ee44).setOrigin(0,0.5);
+        sprite.add([outline,body,letter,hpBg,hpFg]);
+        const entity={key,name:data.name,isEnemy,gx,gy,alive:true,hp:data.hp,maxHp:data.hp,atk:data.atk,def:data.def,sprite,hpFg,hpBarW:barW};
+        this.occupied.set(`${gx},${gy}`,entity);
+        return entity;
+    }
+
+    _updateHPBar(e){
+        if(!e.hpFg)return;
+        const r=e.hp/e.maxHp;
+        e.hpFg.width=e.hpBarW*r;
+        e.hpFg.fillColor=r>0.5?0x44ee44:r>0.25?0xffcc00:0xff3333;
+    }
+    _showHit(entity,dmg){
+        if(!entity.sprite)return;
+        const txt=this.add.text(entity.gx*CFG.TILE+CFG.TILE/2,entity.gy*CFG.TILE-4,`-${dmg}`,
+            {fontSize:'13px',color:'#ff5555',fontStyle:'bold',stroke:'#000',strokeThickness:2}).setOrigin(0.5).setDepth(30);
+        this.tweens.add({targets:txt,y:txt.y-22,alpha:0,duration:700,onComplete:()=>txt.destroy()});
+        this.tweens.add({targets:entity.sprite,alpha:0.25,duration:70,yoyo:true,repeat:1,
+            onComplete:()=>entity.sprite&&entity.sprite.setAlpha(1)});
+    }
+
+    _buildTextures(TS){
+        if(this.textures.exists('t_wall'))return;
+        const g=this.make.graphics({x:0,y:0,add:false});
+        g.fillStyle(CFG.COLORS.WALL);g.fillRect(0,0,TS,TS);
+        g.fillStyle(CFG.COLORS.WALL_SHADE,0.5);g.fillRect(2,2,TS-4,TS-4);
+        g.generateTexture('t_wall',TS,TS);
+        g.clear();g.fillStyle(CFG.COLORS.FLOOR);g.fillRect(0,0,TS,TS);
+        g.fillStyle(CFG.COLORS.FLOOR_SHADE,0.25);g.fillRect(1,1,TS-2,TS-2);
+        g.generateTexture('t_floor',TS,TS);
+        g.clear();g.fillStyle(CFG.COLORS.CORRIDOR);g.fillRect(0,0,TS,TS);
+        g.generateTexture('t_corridor',TS,TS);
+        g.clear();g.fillStyle(CFG.COLORS.FLOOR);g.fillRect(0,0,TS,TS);
+        g.fillStyle(CFG.COLORS.STAIRS_FG);
+        const cx=TS/2;
+        [0,1,2,3].forEach(i=>{const sw=TS-8-i*4;g.fillRect(cx-sw/2,4+i*6,sw,4);});
+        g.generateTexture('t_stairs',TS,TS);
+        g.destroy();
+    }
+    _renderDungeon(){
+        const TS=CFG.TILE;
+        const km={[CFG.T.WALL]:'t_wall',[CFG.T.FLOOR]:'t_floor',[CFG.T.CORRIDOR]:'t_corridor',[CFG.T.STAIRS]:'t_stairs'};
+        for(let y=0;y<CFG.MAP_H;y++)for(let x=0;x<CFG.MAP_W;x++)
+            this.add.image(x*TS,y*TS,km[this.dungeon.tiles[y][x]]||'t_wall').setOrigin(0,0).setDepth(0);
+    }
+
+    _inBounds(x,y){return x>=0&&y>=0&&x<CFG.MAP_W&&y<CFG.MAP_H;}
+    _walkable(x,y){return this._inBounds(x,y)&&this.dungeon.tiles[y][x]!==CFG.T.WALL;}
+    _move(entity,nx,ny){
+        this.occupied.delete(`${entity.gx},${entity.gy}`);
+        entity.gx=nx;entity.gy=ny;
+        this.occupied.set(`${nx},${ny}`,entity);
+        entity.sprite.setPosition(nx*CFG.TILE+CFG.TILE/2,ny*CFG.TILE+CFG.TILE/2);
+    }
+    _snap(){return this.party.map(p=>({x:p.gx,y:p.gy}));}
+    _adjEnemies(m){
+        return[[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy])=>this.occupied.get(`${m.gx+dx},${m.gy+dy}`))
+            .filter(e=>e&&e.isEnemy&&e.alive);
+    }
+    _nearestParty(enemy){
+        let n=null,best=Infinity;
+        for(const m of this.party){if(!m.alive)continue;const d=Math.abs(enemy.gx-m.gx)+Math.abs(enemy.gy-m.gy);if(d<best){best=d;n=m;}}
+        return n;
+    }
+    _freeFloor(cx,cy,exclude){
+        const offs=[[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1],[2,0],[-2,0],[0,2],[0,-2]];
+        for(const[dx,dy]of offs){
+            const x=cx+dx,y=cy+dy,k=`${x},${y}`;
+            if(this._walkable(x,y)&&!this.occupied.has(k)&&!exclude.some(p=>p.x===x&&p.y===y))return{x,y};
+        }
+        return{x:cx,y:cy};
+    }
+    _uiUpdate(){const ui=this.scene.get('UIScene');if(!ui?.sys.isActive())return;ui.updateParty(this.party);ui.updateFloor(this.floor);}
+    _uiFloor(){const ui=this.scene.get('UIScene');if(!ui?.sys.isActive())return;ui.updateFloor(this.floor);}
+    _log(msg){const ui=this.scene.get('UIScene');if(ui?.sys.isActive())ui.addLog(msg);}
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  UI SCENE
+// ══════════════════════════════════════════════════════════════════════════════
+class UIScene extends Phaser.Scene {
+    constructor(){super({key:'UIScene'});}
+    create(){
+        const W=CFG.WIDTH,H=CFG.HEIGHT;
+        this.cameras.main.setViewport(0,0,W,H);
+        // Party panel
+        this.add.rectangle(90,69,180,130,0x000000,0.7);
+        this.add.rectangle(90,69,180,130,0x224466,0.1).setStrokeStyle(1,0x334466,0.8);
+        this.add.text(8,8,'EQUIPO',{fontSize:'11px',color:'#aabbcc',fontStyle:'bold'});
+        this.partyRows=[];
+        for(let i=0;i<3;i++){
+            const y=26+i*36;
+            const dot=this.add.circle(14,y+9,8,0x445566);
+            const lbl=this.add.text(26,y,'—',{fontSize:'11px',color:'#ccddee',fontStyle:'bold'});
+            const hpTxt=this.add.text(26,y+13,'',{fontSize:'10px',color:'#88aabb'});
+            const barBg=this.add.rectangle(50,y+17,80,5,0x222222).setOrigin(0,0.5);
+            const barFg=this.add.rectangle(50,y+17,80,5,0x44ee44).setOrigin(0,0.5);
+            this.partyRows.push({dot,lbl,hpTxt,barBg,barFg,barMaxW:80});
+        }
+        // Floor
+        this.add.rectangle(W-80,18,130,28,0x000000,0.7).setStrokeStyle(1,0x334466,0.8);
+        this.floorText=this.add.text(W-80,18,'PISO  1 / 10',{fontSize:'13px',color:'#ffd700',fontStyle:'bold'}).setOrigin(0.5);
+        // Log
+        const logH=100,logW=W-200;
+        this.add.rectangle(logW/2+190,H-logH/2,logW,logH,0x000000,0.75);
+        this.logLines=[];
+        this.logTexts=[];
+        for(let i=0;i<4;i++){
+            const t=this.add.text(200,H-logH+8+i*22,'',{fontSize:'12px',color:'#ccddee',wordWrap:{width:logW-20}});
+            t.setAlpha(1-i*0.2);
+            this.logTexts.push(t);
+        }
+    }
+    updateParty(party){
+        for(let i=0;i<3;i++){
+            const row=this.partyRows[i],member=party[i];
+            if(!member){row.dot.setFillStyle(0x222222);row.lbl.setText('—').setColor('#444444');row.hpTxt.setText('');row.barFg.width=0;continue;}
+            const ratio=member.hp/member.maxHp;
+            row.dot.setFillStyle(POKEMON[member.key]?.color||0x666666);
+            row.lbl.setText((i===0?'★ ':'  ')+member.name).setColor(i===0?'#ffd700':'#ccddee');
+            row.hpTxt.setText(`HP ${member.hp} / ${member.maxHp}`);
+            row.barFg.width=row.barMaxW*ratio;
+            row.barFg.fillColor=ratio>0.5?0x44ee44:ratio>0.25?0xffcc00:0xff3333;
+        }
+    }
+    updateFloor(floor){this.floorText.setText(`PISO  ${floor} / ${CFG.MAX_FLOORS}`);}
+    addLog(msg){
+        this.logLines.unshift(msg);
+        if(this.logLines.length>this.logTexts.length)this.logLines.pop();
+        this.logTexts.forEach((t,i)=>{t.setText(this.logLines[i]||'');t.setAlpha(Math.max(0.15,1-i*0.22));});
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  GAME OVER / VICTORY
+// ══════════════════════════════════════════════════════════════════════════════
+class GameOverScene extends Phaser.Scene {
+    constructor(){super({key:'GameOverScene'});}
+    create(){
+        const W=CFG.WIDTH,H=CFG.HEIGHT;
+        this.add.rectangle(W/2,H/2,W,H,0x0a0a0a);
+        this.add.text(W/2,H/2-80,'💀',{fontSize:'64px'}).setOrigin(0.5);
+        this.add.text(W/2,H/2-10,'TU EQUIPO FUE DERROTADO',{fontSize:'28px',color:'#ff4444',fontStyle:'bold',stroke:'#220000',strokeThickness:4}).setOrigin(0.5);
+        this.add.text(W/2,H/2+40,'La mazmorra resultó demasiado peligrosa...',{fontSize:'16px',color:'#aaaaaa'}).setOrigin(0.5);
+        const btn=this.add.rectangle(W/2,H/2+100,220,44,0x441111).setInteractive({cursor:'pointer'});
+        const t=this.add.text(W/2,H/2+100,'VOLVER AL MENÚ',{fontSize:'15px',color:'#ffaaaa',fontStyle:'bold'}).setOrigin(0.5);
+        btn.on('pointerover',()=>{btn.setFillStyle(0x661111);t.setColor('#ffd700');});
+        btn.on('pointerout', ()=>{btn.setFillStyle(0x441111);t.setColor('#ffaaaa');});
+        btn.on('pointerdown',()=>this.scene.start('MenuScene'));
+        this.input.keyboard.on('keydown-ENTER',()=>this.scene.start('MenuScene'));
+    }
+}
+class VictoryScene extends Phaser.Scene {
+    constructor(){super({key:'VictoryScene'});}
+    create(){
+        const W=CFG.WIDTH,H=CFG.HEIGHT;
+        this.add.rectangle(W/2,H/2,W,H,0x0d1a0d);
+        this.add.text(W/2,H/2-110,'🏆',{fontSize:'64px'}).setOrigin(0.5);
+        this.add.text(W/2,H/2-40,'¡FELICIDADES!',{fontSize:'36px',color:'#ffd700',fontStyle:'bold',stroke:'#664400',strokeThickness:5}).setOrigin(0.5);
+        this.add.text(W/2,H/2+10,'¡Conquistaste la Torre del Tiempo!',{fontSize:'20px',color:'#aaffaa'}).setOrigin(0.5);
+        this.add.text(W/2,H/2+40,'Tu equipo exploró los 10 pisos y regresó victorioso.',{fontSize:'14px',color:'#888888'}).setOrigin(0.5);
+        const btn=this.add.rectangle(W/2,H/2+105,220,44,0x1a4a1a).setInteractive({cursor:'pointer'});
+        const t=this.add.text(W/2,H/2+105,'JUGAR DE NUEVO',{fontSize:'15px',color:'#aaffaa',fontStyle:'bold'}).setOrigin(0.5);
+        btn.on('pointerover',()=>{btn.setFillStyle(0x2a6a2a);t.setColor('#ffd700');});
+        btn.on('pointerout', ()=>{btn.setFillStyle(0x1a4a1a);t.setColor('#aaffaa');});
+        btn.on('pointerdown',()=>this.scene.start('MenuScene'));
+        this.input.keyboard.on('keydown-ENTER',()=>this.scene.start('MenuScene'));
+        for(let i=0;i<30;i++){
+            const star=this.add.text(Math.random()*W,Math.random()*H,'★',{fontSize:`${10+Math.random()*20}px`,color:'#ffd700'});
+            this.tweens.add({targets:star,alpha:{from:0,to:Math.random()*0.8+0.2},y:star.y-40-Math.random()*60,duration:1000+Math.random()*2000,delay:Math.random()*1000,repeat:-1,yoyo:true});
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  PHASER INIT
+// ══════════════════════════════════════════════════════════════════════════════
+new Phaser.Game({
+    type: Phaser.AUTO,
+    width: CFG.WIDTH, height: CFG.HEIGHT,
+    backgroundColor: '#000000',
+    scene: [MenuScene, GameScene, UIScene, GameOverScene, VictoryScene],
+    parent: document.body,
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    render: { antialias: false, roundPixels: true },
+});
+</script>
+</body>
+</html>

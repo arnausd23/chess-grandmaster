@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Batomon Showdown</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#1a1a2e;font-family:'Press Start 2P',monospace;overflow-x:hidden;min-height:100vh;color:#fff}
+.bg-pattern{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;background-image:
+  repeating-linear-gradient(0deg,transparent,transparent 31px,rgba(0,255,0,0.03) 31px,rgba(0,255,0,0.03) 32px),
+  repeating-linear-gradient(90deg,transparent,transparent 31px,rgba(0,255,0,0.03) 31px,rgba(0,255,0,0.03) 32px);
+  pointer-events:none}
+#app{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:8px}
+
+/* TOP BAR */
+#topbar{display:flex;justify-content:space-between;align-items:center;background:#0d0d1a;border:4px solid #4a9eff;padding:8px 12px;margin-bottom:8px;box-shadow:4px 4px 0 #000}
+.tb-item{display:flex;flex-direction:column;align-items:center;gap:2px}
+.tb-label{font-size:6px;color:#888}
+.tb-val{font-size:10px;color:#ffe066}
+#round-badge{background:#ff4444;padding:4px 8px;border:3px solid #ff8888;font-size:10px}
+
+/* MAIN LAYOUT */
+#main-layout{display:grid;grid-template-columns:1fr 160px;gap:8px}
+#center-panel{display:flex;flex-direction:column;gap:8px}
+#right-sidebar{display:flex;flex-direction:column;gap:8px}
+
+/* PANELS */
+.panel{background:#0d0d1a;border:4px solid #4a9eff;padding:8px;box-shadow:4px 4px 0 #000}
+.panel-title{font-size:8px;color:#4a9eff;border-bottom:2px solid #4a9eff;padding-bottom:4px;margin-bottom:8px;text-align:center}
+
+/* BATTLE ARENA */
+#arena{min-height:220px;background:linear-gradient(180deg,#0a1628 0%,#0d2040 50%,#0a1628 100%);border:4px solid #4a9eff;padding:8px;position:relative;overflow:hidden}
+#arena::before{content:'';position:absolute;bottom:40%;left:0;right:0;height:2px;background:rgba(74,158,255,0.2)}
+.arena-row{display:flex;gap:4px;justify-content:center;align-items:center;padding:4px 0}
+.arena-label{font-size:6px;color:#888;text-align:center;margin-bottom:2px}
+.battle-slot{width:52px;height:64px;border:2px solid #2a2a4a;background:rgba(0,0,0,0.3);display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;border-radius:2px}
+.battle-slot canvas{image-rendering:pixelated}
+.bat-name-sm{font-size:5px;color:#ccc;text-align:center;margin-top:2px;max-width:50px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.bat-hp-bar{width:44px;height:4px;background:#333;border:1px solid #555;margin-top:1px}
+.bat-hp-fill{height:100%;background:#44ff44;transition:width 0.3s}
+.bat-hp-fill.low{background:#ff4444}
+.bat-hp-fill.mid{background:#ffaa00}
+.hp-text-sm{font-size:5px;color:#aaa;margin-top:1px}
+.shake{animation:shake 0.3s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.flash-hit{animation:flashhit 0.3s}
+@keyframes flashhit{0%,100%{filter:brightness(1)}50%{filter:brightness(3) saturate(0)}}
+.dead-bat{opacity:0.3;filter:grayscale(1)}
+
+/* BATTLE LOG */
+#battle-log{height:90px;overflow-y:auto;background:#050510;border:2px solid #2a2a4a;padding:4px;font-size:6px;line-height:1.8}
+.log-entry{color:#aaa;padding:1px 0}
+.log-entry.hit{color:#ffdd44}
+.log-entry.ko{color:#ff4444}
+.log-entry.win{color:#44ff44}
+.log-entry.synergy{color:#aa88ff}
+.log-entry.passive{color:#88aaff}
+
+/* SHOP */
+#shop-panel{background:#0d0d1a;border:4px solid #ffaa00;padding:8px;box-shadow:4px 4px 0 #000}
+.shop-grid{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:8px}
+.shop-card{width:90px;background:#0a0a1e;border:3px solid #4a9eff;padding:6px;cursor:pointer;transition:border-color 0.1s;position:relative}
+.shop-card:hover{border-color:#ffaa00;box-shadow:0 0 8px #ffaa00}
+.shop-card.sold{opacity:0.3;pointer-events:none}
+.shop-card .sc-name{font-size:7px;color:#fff;text-align:center;margin-top:4px}
+.shop-card .sc-type{font-size:6px;text-align:center;margin-bottom:2px}
+.shop-card .sc-stats{font-size:5px;color:#aaa;text-align:center}
+.shop-card .sc-cost{position:absolute;top:2px;right:4px;font-size:7px;color:#ffe066}
+.shop-card .sc-ability{font-size:5px;color:#88aaff;margin-top:2px;line-height:1.4;text-align:center}
+.shop-actions{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+
+/* TEAM SLOTS */
+#team-area{background:#0d0d1a;border:4px solid #44ff88;padding:8px;box-shadow:4px 4px 0 #000}
+.team-slots{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+.team-slot{width:80px;min-height:100px;border:3px solid #2a4a2a;background:#050f05;padding:4px;cursor:pointer;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:border-color 0.1s}
+.team-slot.occupied{border-color:#44ff88}
+.team-slot.occupied:hover{border-color:#ffaa00}
+.team-slot.empty{border-color:#1a2a1a;color:#333;font-size:8px}
+.team-slot.drag-over{border-color:#fff;box-shadow:0 0 8px #fff}
+.team-slot .ts-name{font-size:6px;color:#fff;text-align:center;margin-top:2px}
+.team-slot .ts-stats{font-size:5px;color:#888;text-align:center}
+.team-slot .ts-sell{position:absolute;top:2px;right:2px;font-size:6px;color:#ff6666;cursor:pointer;background:#1a0000;border:1px solid #ff6666;padding:1px 2px;line-height:1}
+.team-slot .ts-lvl{position:absolute;top:2px;left:2px;font-size:6px;color:#ffe066;background:#1a1a00;border:1px solid #ffe066;padding:1px 2px}
+
+/* SYNERGY PANEL */
+#synergy-panel{min-height:80px}
+.syn-item{display:flex;align-items:center;gap:4px;margin-bottom:4px;padding:2px;border:1px solid #333}
+.syn-icon{width:16px;height:16px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.syn-text{font-size:5px;color:#ccc;line-height:1.4}
+.syn-count{font-size:7px;color:#ffe066;margin-left:auto}
+
+/* TRAINER PANEL */
+#trainer-panel{}
+.trainer-info{text-align:center}
+.trainer-name{font-size:7px;color:#ffe066;margin-bottom:4px}
+.trainer-effect{font-size:5px;color:#88aaff;line-height:1.6}
+
+/* BUTTONS */
+.btn{display:inline-block;padding:6px 10px;font-family:'Press Start 2P',monospace;font-size:8px;cursor:pointer;border:3px solid;text-align:center;transition:transform 0.1s;user-select:none}
+.btn:hover{transform:translateY(-2px)}
+.btn:active{transform:translateY(1px)}
+.btn-blue{background:#1a3a6a;color:#4a9eff;border-color:#4a9eff}
+.btn-green{background:#0a2a0a;color:#44ff88;border-color:#44ff88}
+.btn-yellow{background:#2a1a00;color:#ffe066;border-color:#ffe066}
+.btn-red{background:#2a0a0a;color:#ff6666;border-color:#ff6666}
+.btn-purple{background:#1a0a2a;color:#cc88ff;border-color:#cc88ff}
+.btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+
+/* SCREENS */
+#start-screen,#results-screen{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.95);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px}
+.big-title{font-size:20px;color:#ffe066;text-shadow:4px 4px 0 #ff4400,8px 8px 0 #000;text-align:center;line-height:1.6}
+.sub-title{font-size:10px;color:#4a9eff;text-align:center}
+.trainer-select{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;max-width:800px}
+.trainer-card{width:130px;background:#0d0d1a;border:3px solid #4a9eff;padding:8px;cursor:pointer;text-align:center;transition:border-color 0.1s}
+.trainer-card:hover,.trainer-card.selected{border-color:#ffaa00;box-shadow:0 0 12px #ffaa00}
+.trainer-card .tc-name{font-size:8px;color:#ffe066;margin-bottom:4px}
+.trainer-card .tc-emoji{font-size:24px;margin-bottom:4px;display:block}
+.trainer-card .tc-desc{font-size:5px;color:#aaa;line-height:1.6}
+
+/* TYPE COLORS */
+.type-Fire{color:#ff6633}.type-Water{color:#33aaff}.type-Earth{color:#88aa44}
+.type-Wind{color:#aaffee}.type-Shadow{color:#aa44ff}.type-Light{color:#ffee44}
+.type-bg-Fire{background:#3a1500}.type-bg-Water{background:#001530}.type-bg-Earth{background:#151e05}
+.type-bg-Wind{background:#053030}.type-bg-Shadow{background:#150030}.type-bg-Light{background:#302800}
+
+/* RESULT SCREEN */
+.result-big{font-size:14px;text-align:center;margin-bottom:8px}
+.result-stats{font-size:8px;color:#aaa;text-align:center;line-height:2}
+
+/* PHASE INDICATOR */
+#phase-indicator{text-align:center;font-size:10px;padding:4px;margin-bottom:4px}
+.phase-shop{color:#ffaa00;border:2px solid #ffaa00;background:#1a0d00}
+.phase-battle{color:#ff4444;border:2px solid #ff4444;background:#1a0000}
+
+/* GOLD INDICATOR */
+.gold-display{display:flex;align-items:center;gap:4px}
+.gold-coin{width:12px;height:12px;background:#ffe066;border:2px solid #aa8800;border-radius:50%;display:inline-block}
+
+/* OPPONENT INFO */
+#opponent-info{text-align:center;font-size:7px;color:#ff6666;padding:4px}
+
+/* VS DISPLAY */
+#vs-display{font-size:16px;color:#ff4444;text-align:center;text-shadow:2px 2px 0 #000;padding:4px 0}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0d0d1a}::-webkit-scrollbar-thumb{background:#4a9eff}
+
+/* DAMAGE FLOAT */
+.dmg-float{position:absolute;font-size:9px;color:#ff4444;font-weight:bold;pointer-events:none;animation:floatup 0.8s forwards;text-shadow:1px 1px 0 #000;z-index:50}
+@keyframes floatup{0%{transform:translateY(0);opacity:1}100%{transform:translateY(-30px);opacity:0}}
+
+/* LEVEL UP FLASH */
+.levelup-flash{animation:lvlflash 0.5s}
+@keyframes lvlflash{0%,100%{box-shadow:none}50%{box-shadow:0 0 16px #ffe066}}
+
+/* LOCKED */
+.shop-card.locked{border-color:#ffaa00}
+.lock-btn{font-size:5px;position:absolute;bottom:2px;left:2px;background:#1a1a00;border:1px solid #ffaa00;color:#ffe066;cursor:pointer;padding:1px 3px}
+
+/* INTEREST */
+#interest-info{font-size:6px;color:#888;text-align:center;padding:2px}
+</style>
+</head>
+<body>
+<div class="bg-pattern"></div>
+
+<!-- START SCREEN -->
+<div id="start-screen">
+  <div class="big-title">BATOMON<br>SHOWDOWN</div>
+  <div class="sub-title">Choose Your Trainer</div>
+  <div class="trainer-select" id="trainer-select"></div>
+  <button class="btn btn-green" id="start-btn" disabled onclick="startGame()">START GAME</button>
+</div>
+
+<!-- RESULTS SCREEN -->
+<div id="results-screen" style="display:none">
+  <div class="big-title" id="result-title">GAME OVER</div>
+  <div class="result-stats" id="result-stats"></div>
+  <button class="btn btn-green" onclick="location.reload()">PLAY AGAIN</button>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <div id="topbar">
+    <div class="tb-item">
+      <span class="tb-label">ROUND</span>
+      <span class="tb-val" id="tb-round">1/8</span>
+    </div>
+    <div class="tb-item">
+      <span id="round-badge">SHOP PHASE</span>
+    </div>
+    <div class="tb-item">
+      <span class="tb-label">GOLD</span>
+      <span class="tb-val"><span class="gold-coin"></span><span id="tb-gold">10</span></span>
+    </div>
+    <div class="tb-item">
+      <span class="tb-label">RECORD</span>
+      <span class="tb-val" id="tb-record">0W-0L</span>
+    </div>
+    <div class="tb-item">
+      <span class="tb-label">LIVES</span>
+      <span class="tb-val" id="tb-lives">❤❤❤</span>
+    </div>
+  </div>
+
+  <div id="phase-indicator" class="phase-shop">--- SHOP PHASE: BUY & ARRANGE YOUR TEAM ---</div>
+
+  <div id="main-layout">
+    <div id="center-panel">
+
+      <!-- BATTLE ARENA -->
+      <div id="arena">
+        <div class="arena-label" id="opponent-label" style="font-size:7px;color:#ff6666;text-align:center;margin-bottom:2px">Opponent</div>
+        <div class="arena-row" id="enemy-row"></div>
+        <div id="vs-display" style="display:none">⚔ VS ⚔</div>
+        <div class="arena-row" id="player-row"></div>
+        <div class="arena-label" style="margin-top:2px">Your Team</div>
+      </div>
+
+      <!-- BATTLE LOG -->
+      <div class="panel" style="padding:4px">
+        <div class="panel-title">BATTLE LOG</div>
+        <div id="battle-log"></div>
+      </div>
+
+      <!-- SHOP -->
+      <div id="shop-panel">
+        <div class="panel-title" style="color:#ffaa00;border-color:#ffaa00">SHOP</div>
+        <div class="shop-grid" id="shop-grid"></div>
+        <div id="interest-info"></div>
+        <div class="shop-actions">
+          <button class="btn btn-yellow" onclick="rerollShop()">REROLL (1🪙)</button>
+          <button class="btn btn-red" id="battle-btn" onclick="startBattle()">⚔ BATTLE!</button>
+          <button class="btn btn-blue" onclick="freezeShop()">🔒 FREEZE</button>
+        </div>
+      </div>
+
+      <!-- TEAM AREA -->
+      <div id="team-area">
+        <div class="panel-title" style="color:#44ff88;border-color:#44ff88">YOUR TEAM (max 6)</div>
+        <div class="team-slots" id="team-slots"></div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT SIDEBAR -->
+    <div id="right-sidebar">
+      <div class="panel" id="trainer-panel">
+        <div class="panel-title">TRAINER</div>
+        <div class="trainer-info" id="trainer-display"></div>
+      </div>
+      <div class="panel" id="synergy-panel">
+        <div class="panel-title">SYNERGIES</div>
+        <div id="synergy-list"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">NEXT OPP</div>
+        <div id="opponent-info">???</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== AUDIO =====================
+const AC = new (window.AudioContext || window.webkitAudioContext)();
+function playBlip(freq=440,dur=0.08,type='square'){
+  const o=AC.createOscillator(),g=AC.createGain();
+  o.connect(g);g.connect(AC.destination);
+  o.type=type;o.frequency.setValueAtTime(freq,AC.currentTime);
+  g.gain.setValueAtTime(0.15,AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+dur);
+  o.start();o.stop(AC.currentTime+dur);
+}
+function playSFX(type){
+  if(type==='buy'){playBlip(440,0.1);setTimeout(()=>playBlip(660,0.1),80)}
+  else if(type==='hit'){playBlip(150,0.15,'sawtooth')}
+  else if(type==='ko'){playBlip(200,0.2,'sawtooth');setTimeout(()=>playBlip(130,0.3,'sawtooth'),150)}
+  else if(type==='win'){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>playBlip(f,0.15),i*100))}
+  else if(type==='lose'){[392,349,311,261].forEach((f,i)=>setTimeout(()=>playBlip(f,0.2,'sawtooth'),i*120))}
+  else if(type==='sell'){playBlip(330,0.08);setTimeout(()=>playBlip(220,0.08),60)}
+}
+
+// ===================== SPRITE DATA =====================
+// Each sprite is a 16x16 grid of hex colors ('' = transparent)
+const SPRITES = {
+  Flamox:[
+    '','','','ff4400','ff4400','','','','','','ff4400','ff4400','','','','',
+    '','','ff4400','ff6600','ff6600','ff4400','','','','ff4400','ff6600','ff6600','ff4400','','','',
+    '','ff4400','ff6600','ffaa00','ffaa00','ff6600','ff4400','','ff4400','ff6600','ffaa00','ffaa00','ff6600','ff4400','','',
+    'ff4400','ff6600','ffaa00','ffffff','ffaa00','ffaa00','ff6600','ff4400','ff6600','ffaa00','ffaa00','ffffff','ffaa00','ff6600','ff4400','',
+    'ff4400','ff6600','ffaa00','ffaa00','880000','ffaa00','ff6600','ff4400','ff6600','ffaa00','880000','ffaa00','ffaa00','ff6600','ff4400','',
+    'ff4400','ff6600','ff4400','ffaa00','ffaa00','ffaa00','ff6600','ff4400','ff4400','ff6600','ffaa00','ffaa00','ff4400','ff6600','ff4400','',
+    'ff4400','ff4400','','ff6600','ff6600','ff6600','ff4400','','','ff4400','ff6600','ff6600','','ff4400','ff4400','',
+    '','','','ff4400','ff6600','ff4400','','','','','ff4400','ff6600','ff4400','','','',
+    '','','','','ff4400','','','','','','','ff4400','','','','',
+    '','','ff4400','ff6600','ff6600','ff4400','ff4400','','','ff4400','ff4400','ff6600','ff6600','ff4400','','',
+    '','ff4400','ff6600','ff6600','ff6600','ff6600','ff6600','ff4400','ff4400','ff6600','ff6600','ff6600','ff6600','ff6600','ff4400','',
+    'ff4400','ff6600','ff6600','ff4400','ff4400','ff4400','ff6600','ff6600','ff6600','ff6600','ff4400','ff4400','ff4400','ff6600','ff6600','ff4400',
+    'ff4400','ff4400','ff4400','','','','ff4400','ff4400','ff4400','ff4400','','','','ff4400','ff4400','ff4400',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+  ],
+  Aqueel:[
+    '','','','3399ff','3399ff','3399ff','','','','','3399ff','3399ff','3399ff','','','',
+    '','','3399ff','66bbff','66bbff','66bbff','3399ff','','','3399ff','66bbff','66bbff','66bbff','3399ff','','',
+    '','3399ff','66bbff','aaddff','aaddff','aaddff','66bbff','3399ff','3399ff','66bbff','aaddff','aaddff','aaddff','66bbff','3399ff','',
+    '3399ff','66bbff','aaddff','ffffff','aaddff','aaddff','66bbff','3399ff','66bbff','aaddff','aaddff','ffffff','aaddff','66bbff','3399ff','',
+    '3399ff','66bbff','aaddff','aaddff','003399','aaddff','66bbff','3399ff','66bbff','aaddff','003399','aaddff','aaddff','66bbff','3399ff','',
+    '3399ff','66bbff','3399ff','aaddff','aaddff','aaddff','66bbff','3399ff','3399ff','66bbff','aaddff','aaddff','3399ff','66bbff','3399ff','',
+    '3399ff','3399ff','','3399ff','66bbff','3399ff','3399ff','','','3399ff','3399ff','66bbff','3399ff','','3399ff','3399ff',
+    '','','','','3399ff','','','','','','','3399ff','','','','',
+    '','','3399ff','3399ff','3399ff','3399ff','','','','','3399ff','3399ff','3399ff','3399ff','','',
+    '','3399ff','66bbff','66bbff','66bbff','66bbff','3399ff','','','3399ff','66bbff','66bbff','66bbff','66bbff','3399ff','',
+    '3399ff','66bbff','66bbff','3399ff','3399ff','66bbff','66bbff','3399ff','3399ff','66bbff','66bbff','3399ff','3399ff','66bbff','66bbff','3399ff',
+    '3399ff','3399ff','3399ff','','','3399ff','3399ff','3399ff','3399ff','3399ff','3399ff','','','3399ff','3399ff','3399ff',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+  ],
+  Terrapaw:[
+    '','','','','','','','','','','','','','','','',
+    '','','','88aa44','88aa44','88aa44','88aa44','','','88aa44','88aa44','88aa44','88aa44','','','',
+    '','','88aa44','aabb66','aabb66','aabb66','aabb66','88aa44','88aa44','aabb66','aabb66','aabb66','aabb66','88aa44','','',
+    '','88aa44','aabb66','ccdd88','ccdd88','ccdd88','aabb66','88aa44','88aa44','aabb66','ccdd88','ccdd88','ccdd88','aabb66','88aa44','',
+    '88aa44','aabb66','ccdd88','ffffff','ccdd88','ccdd88','aabb66','88aa44','88aa44','aabb66','ccdd88','ccdd88','ffffff','ccdd88','aabb66','88aa44',
+    '88aa44','aabb66','ccdd88','ccdd88','446600','ccdd88','aabb66','88aa44','88aa44','aabb66','ccdd88','446600','ccdd88','ccdd88','aabb66','88aa44',
+    '88aa44','88aa44','aabb66','ccdd88','ccdd88','aabb66','88aa44','','','88aa44','aabb66','ccdd88','ccdd88','aabb66','88aa44','88aa44',
+    '','88aa44','88aa44','88aa44','88aa44','88aa44','','','','','88aa44','88aa44','88aa44','88aa44','88aa44','',
+    '','','88aa44','aabb66','aabb66','88aa44','88aa44','88aa44','88aa44','88aa44','88aa44','aabb66','aabb66','88aa44','','',
+    '','88aa44','aabb66','aabb66','aabb66','aabb66','aabb66','88aa44','88aa44','aabb66','aabb66','aabb66','aabb66','aabb66','88aa44','',
+    '88aa44','aabb66','aabb66','88aa44','88aa44','88aa44','aabb66','aabb66','aabb66','aabb66','88aa44','88aa44','88aa44','aabb66','aabb66','88aa44',
+    '88aa44','88aa44','88aa44','','','88aa44','88aa44','88aa44','88aa44','88aa44','88aa44','','','88aa44','88aa44','88aa44',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+  ],
+  Zephyr:[
+    '','','aaffee','aaffee','','','','','','','','','aaffee','aaffee','','',
+    '','aaffee','66ffdd','66ffdd','aaffee','','','','','','','aaffee','66ffdd','66ffdd','aaffee','',
+    'aaffee','66ffdd','44ddcc','44ddcc','66ffdd','aaffee','','','','','aaffee','66ffdd','44ddcc','44ddcc','66ffdd','aaffee',
+    'aaffee','66ffdd','44ddcc','ffffff','44ddcc','66ffdd','aaffee','','','aaffee','66ffdd','44ddcc','ffffff','44ddcc','66ffdd','aaffee',
+    'aaffee','66ffdd','44ddcc','44ddcc','004444','44ddcc','66ffdd','aaffee','aaffee','66ffdd','44ddcc','004444','44ddcc','44ddcc','66ffdd','aaffee',
+    'aaffee','66ffdd','aaffee','44ddcc','44ddcc','44ddcc','66ffdd','aaffee','aaffee','66ffdd','44ddcc','44ddcc','44ddcc','aaffee','66ffdd','aaffee',
+    '','aaffee','','aaffee','66ffdd','aaffee','','','','','','aaffee','66ffdd','aaffee','','',
+    '','','','','aaffee','','','','','','','','aaffee','','','',
+    '','aaffee','aaffee','aaffee','aaffee','aaffee','','','','','','aaffee','aaffee','aaffee','aaffee','',
+    'aaffee','66ffdd','66ffdd','66ffdd','66ffdd','66ffdd','aaffee','','','aaffee','66ffdd','66ffdd','66ffdd','66ffdd','66ffdd','aaffee',
+    'aaffee','66ffdd','aaffee','aaffee','aaffee','66ffdd','aaffee','','','aaffee','66ffdd','aaffee','aaffee','aaffee','66ffdd','aaffee',
+    '','aaffee','','','','aaffee','','','','','aaffee','','','','aaffee','',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+  ],
+  Noctis:[
+    '','','','aa44ff','aa44ff','','','','','','aa44ff','aa44ff','','','','',
+    '','','aa44ff','cc66ff','cc66ff','aa44ff','','','','aa44ff','cc66ff','cc66ff','aa44ff','','','',
+    '','aa44ff','cc66ff','220044','220044','cc66ff','aa44ff','','aa44ff','cc66ff','220044','220044','cc66ff','aa44ff','','',
+    'aa44ff','cc66ff','220044','ffffff','220044','220044','cc66ff','aa44ff','cc66ff','220044','220044','ffffff','220044','cc66ff','aa44ff','',
+    'aa44ff','cc66ff','220044','220044','ff00ff','220044','cc66ff','aa44ff','cc66ff','220044','ff00ff','220044','220044','cc66ff','aa44ff','',
+    'aa44ff','cc66ff','aa44ff','220044','220044','220044','cc66ff','aa44ff','aa44ff','cc66ff','220044','220044','220044','aa44ff','cc66ff','aa44ff',
+    'aa44ff','aa44ff','','aa44ff','cc66ff','aa44ff','aa44ff','','','aa44ff','aa44ff','cc66ff','aa44ff','','aa44ff','aa44ff',
+    '','','','','aa44ff','','','','','','','aa44ff','','','','',
+    '','','aa44ff','aa44ff','aa44ff','aa44ff','','','','','aa44ff','aa44ff','aa44ff','aa44ff','','',
+    '','aa44ff','cc66ff','220044','220044','cc66ff','aa44ff','','','aa44ff','cc66ff','220044','220044','cc66ff','aa44ff','',
+    'aa44ff','cc66ff','220044','aa44ff','aa44ff','220044','cc66ff','aa44ff','aa44ff','cc66ff','220044','aa44ff','aa44ff','220044','cc66ff','aa44ff',
+    'aa44ff','220044','aa44ff','','','aa44ff','220044','aa44ff','aa44ff','220044','aa44ff','','','aa44ff','220044','aa44ff',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+  ],
+  Solara:[
+    '','','','ffee44','ffee44','','','','','','ffee44','ffee44','','','','',
+    '','','ffee44','ffff88','ffff88','ffee44','','','','ffee44','ffff88','ffff88','ffee44','','','',
+    '','ffee44','ffff88','ffffff','ffffff','ffff88','ffee44','','','ffee44','ffff88','ffffff','ffffff','ffff88','ffee44','',
+    'ffee44','ffff88','ffffff','ffff88','ffffff','ffffff','ffff88','ffee44','ffee44','ffff88','ffffff','ffffff','ffff88','ffffff','ffff88','ffee44',
+    'ffee44','ffff88','ffffff','ffffff','884400','ffffff','ffff88','ffee44','ffee44','ffff88','ffffff','884400','ffffff','ffffff','ffff88','ffee44',
+    'ffee44','ffff88','ffee44','ffffff','ffffff','ffffff','ffff88','ffee44','ffee44','ffff88','ffffff','ffffff','ffffff','ffee44','ffff88','ffee44',
+    '','ffee44','','ffee44','ffff88','ffee44','','','','','','ffee44','ffff88','ffee44','','',
+    '','','','','ffee44','','','','','','','','ffee44','','','',
+    '','ffee44','ffee44','ffff88','ffff88','ffee44','ffee44','','','ffee44','ffee44','ffff88','ffff88','ffee44','ffee44','',
+    'ffee44','ffff88','ffff88','ffee44','ffee44','ffff88','ffff88','ffee44','ffee44','ffff88','ffff88','ffee44','ffee44','ffff88','ffff88','ffee44',
+    'ffee44','ffee44','ffee44','','','ffee44','ffee44','ffee44','ffee44','ffee44','ffee44','','','ffee44','ffee44','ffee44',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+    '','','','','','','','','','','','','','','','',
+  ],
+};
+
+// Fallback sprite generator for batomon without custom sprites
+function generateSprite(name, type){
+  const typeColors={Fire:['ff4400','ff6600','ffaa00'],Water:['0033cc','3399ff','66bbff'],
+    Earth:['446600','88aa44','ccdd88'],Wind:['00aaaa','44ffee','aaffff'],
+    Shadow:['220044','aa44ff','cc88ff'],Light:['884400','ffee44','ffff88']};
+  const cols=typeColors[type]||['888888','aaaaaa','cccccc'];
+  // Simple 16x16 pattern based on name hash
+  const hash=name.split('').reduce((a,c)=>a+c.charCodeAt(0),0);
+  const grid=[];
+  for(let y=0;y<16;y++){
+    for(let x=0;x<16;x++){
+      const d=Math.sqrt((x-7.5)**2+(y-7.5)**2);
+      if(d<7&&(hash+x*3+y*5)%7!==0) grid.push(cols[(hash+x+y)%3]);
+      else grid.push('');
+    }
+  }
+  return grid;
+}
+
+// ===================== BATOMON DATABASE =====================
+const BATOMON_DB = [
+  {id:0,name:'Flamox',type:'Fire',hp:20,atk:18,def:8,spd:14,
+   ability:{name:'Blaze',desc:'Adjacent Fire ally → +3 Atk',
+   effect:(bat,team)=>{if(team.some(b=>b&&b!==bat&&b.type==='Fire'))bat._atkBonus=(bat._atkBonus||0)+3;}}},
+  {id:1,name:'Aqueel',type:'Water',hp:22,atk:12,def:12,spd:13,
+   ability:{name:'Tidal',desc:'After attack, heal 2 HP',
+   effect:(bat,team,state)=>{state.healAfter=(state.healAfter||0)+2;}}},
+  {id:2,name:'Terrapaw',type:'Earth',hp:28,atk:10,def:16,spd:8,
+   ability:{name:'Fortify',desc:'First hit blocked',
+   effect:(bat)=>{bat._shield=true;}}},
+  {id:3,name:'Zephyr',type:'Wind',hp:16,atk:15,def:6,spd:22,
+   ability:{name:'Swiftness',desc:'Always attacks first',
+   effect:(bat)=>{bat._alwaysFirst=true;}}},
+  {id:4,name:'Noctis',type:'Shadow',hp:18,atk:20,def:5,spd:17,
+   ability:{name:'Phantom',desc:'20% dodge chance',
+   effect:(bat)=>{bat._dodge=20;}}},
+  {id:5,name:'Solara',type:'Light',hp:19,atk:14,def:11,spd:15,
+   ability:{name:'Radiance',desc:'+2 Def to all allies',
+   effect:(bat,team)=>{team.forEach(b=>{if(b)b._defBonus=(b._defBonus||0)+2;});}}},
+  {id:6,name:'Magmara',type:'Fire',hp:17,atk:22,def:6,spd:11,
+   ability:{name:'Eruption',desc:'First attack deals +8 dmg',
+   effect:(bat)=>{bat._burstFirst=8;}}},
+  {id:7,name:'Frostine',type:'Water',hp:24,atk:11,def:14,spd:10,
+   ability:{name:'Chill',desc:'Slows attacker: -3 Spd',
+   effect:(bat)=>{bat._chillOnHit=true;}}},
+  {id:8,name:'Golemog',type:'Earth',hp:30,atk:9,def:20,spd:5,
+   ability:{name:'Stone Skin',desc:'Take -3 dmg per hit',
+   effect:(bat)=>{bat._dmgReduce=3;}}},
+  {id:9,name:'Cyclona',type:'Wind',hp:15,atk:16,def:5,spd:25,
+   ability:{name:'Tailwind',desc:'+3 Spd to Wind allies',
+   effect:(bat,team)=>{team.forEach(b=>{if(b&&b.type==='Wind')b._spdBonus=(b._spdBonus||0)+3;});}}},
+  {id:10,name:'Umbraix',type:'Shadow',hp:17,atk:19,def:7,spd:18,
+   ability:{name:'Drain',desc:'Heals 3 HP on hit',
+   effect:(bat)=>{bat._drainHp=3;}}},
+  {id:11,name:'Luminos',type:'Light',hp:21,atk:12,def:13,spd:14,
+   ability:{name:'Blessing',desc:'+5 HP to weakest ally',
+   effect:(bat,team)=>{const alive=team.filter(b=>b);if(alive.length){const w=alive.reduce((a,b)=>a.currentHp<b.currentHp?a:b);w.currentHp+=5;}}}},
+  {id:12,name:'Emberwing',type:'Fire',hp:16,atk:16,def:9,spd:19,
+   ability:{name:'Ignite',desc:'Burns: +2 dmg/turn',
+   effect:(bat)=>{bat._burn=2;}}},
+  {id:13,name:'Tideclaw',type:'Water',hp:20,atk:15,def:10,spd:16,
+   ability:{name:'Surge',desc:'Every 2nd attack +6 dmg',
+   effect:(bat)=>{bat._surgeTimer=0;}}},
+  {id:14,name:'Mosscap',type:'Earth',hp:25,atk:11,def:15,spd:9,
+   ability:{name:'Regrowth',desc:'Regen 1 HP/turn',
+   effect:(bat)=>{bat._regen=1;}}},
+  {id:15,name:'Vortexo',type:'Wind',hp:14,atk:18,def:4,spd:23,
+   ability:{name:'Whirlwind',desc:'Hits all enemies for half',
+   effect:(bat)=>{bat._aoe=true;}}},
+  {id:16,name:'Spectra',type:'Shadow',hp:16,atk:21,def:4,spd:20,
+   ability:{name:'Vanish',desc:'First turn invulnerable',
+   effect:(bat)=>{bat._invuln=1;}}},
+  {id:17,name:'Aurelius',type:'Light',hp:23,atk:10,def:15,spd:12,
+   ability:{name:'Shield Wall',desc:'First hit 0 damage',
+   effect:(bat)=>{bat._shieldWall=true;}}},
+  {id:18,name:'Cindra',type:'Fire',hp:18,atk:17,def:10,spd:15,
+   ability:{name:'Heatwave',desc:'Fire synergy +1 Atk',
+   effect:(bat,team)=>{const f=team.filter(b=>b&&b.type==='Fire').length;bat._atkBonus=(bat._atkBonus||0)+f;}}},
+  {id:19,name:'Abyssal',type:'Shadow',hp:20,atk:15,def:9,spd:14,
+   ability:{name:'Void',desc:'Ignores defense on crits',
+   effect:(bat)=>{bat._critPierce=true;}}},
+];
+
+// ===================== TRAINERS =====================
+const TRAINERS = [
+  {id:0,name:'Bug Catcher',emoji:'🪲',
+   desc:'Speed>15 Batomon gain +5 Speed',
+   effect:(team)=>{team.forEach(b=>{if(b&&b.spd>15)b._spdBonus=(b._spdBonus||0)+5;})}},
+  {id:1,name:'Dragon Tamer',emoji:'🐉',
+   desc:'All Batomon gain +3 Atk & +5 HP',
+   effect:(team)=>{team.forEach(b=>{if(b){b._atkBonus=(b._atkBonus||0)+3;b.currentHp=Math.min(b.maxHp+5,b.currentHp+5);b.maxHp+=5;}})}},
+  {id:2,name:'Chef',emoji:'👨‍🍳',
+   desc:'Lowest HP Batomon gets +3 random stat each battle',
+   effect:(team)=>{const alive=team.filter(b=>b);if(alive.length){const w=alive.reduce((a,b)=>a.currentHp<b.currentHp?a:b);const stats=['_atkBonus','_defBonus','_spdBonus'];const s=stats[Math.floor(Math.random()*3)];w[s]=(w[s]||0)+3;}}},
+  {id:3,name:'Shadow Mage',emoji:'🔮',
+   desc:'Shadow Batomon abilities trigger twice',
+   effect:(team)=>{team.forEach(b=>{if(b&&b.type==='Shadow')b._doubleTrigger=true;})}},
+  {id:4,name:'Paladin',emoji:'🛡️',
+   desc:'All Batomon start with +5 HP shield',
+   effect:(team)=>{team.forEach(b=>{if(b)b._shield5=(b._shield5||0)+5;})}},
+];
+
+// ===================== OPPONENT TEAMS =====================
+const OPPONENTS = [
+  {name:'PixelTrainer99',team:[0,2,5],difficulty:1},
+  {name:'DragonQueen',team:[6,9,3],difficulty:2},
+  {name:'CrunchMaster',team:[1,7,14],difficulty:2},
+  {name:'ShadowFox',team:[4,10,16],difficulty:3},
+  {name:'BoulderBro',team:[2,8,14,11],difficulty:3},
+  {name:'StormRider',team:[3,9,15,0],difficulty:4},
+  {name:'NightOwl',team:[4,10,16,19,5],difficulty:4},
+  {name:'Champion_X',team:[6,12,18,8,11,17],difficulty:5},
+];
+
+// ===================== GAME STATE =====================
+const GS = {
+  round: 1,
+  phase: 'shop', // 'shop' | 'battle'
+  gold: 10,
+  wins: 0,
+  losses: 0,
+  lives: 5,
+  team: Array(6).fill(null), // player's team slots
+  shop: [],
+  shopFrozen: false,
+  trainer: null,
+  dragSrc: null,
+  battleRunning: false,
+};
+
+function deepCloneBat(b){
+  if(!b) return null;
+  return JSON.parse(JSON.stringify(b));
+}
+
+function makeBatInstance(templateId, level=1){
+  const t = BATOMON_DB[templateId];
+  const scale = 1 + (level-1)*0.2;
+  return {
+    ...JSON.parse(JSON.stringify(t)),
+    templateId,
+    level,
+    maxHp: Math.round(t.hp * scale),
+    currentHp: Math.round(t.hp * scale),
+    cost: Math.min(3, Math.ceil(t.hp/10 + t.atk/12)),
+    // runtime bonuses
+    _atkBonus:0, _defBonus:0, _spdBonus:0,
+    _shield:false, _shieldWall:false, _alwaysFirst:false,
+    _dodge:0, _burstFirst:0, _drainHp:0, _regen:0,
+    _burn:0, _surgeTimer:0, _aoe:false, _invuln:0,
+    _critPierce:false, _shield5:0, _doubleTrigger:false,
+    _chillOnHit:false, _dmgReduce:0,
+  };
+}
+
+// ===================== SHOP LOGIC =====================
+function generateShop(){
+  if(GS.shopFrozen) return;
+  const pool = [...Array(20).keys()];
+  const picks = [];
+  while(picks.length < 5){
+    const idx = Math.floor(Math.random()*pool.length);
+    const bid = pool.splice(idx,1)[0];
+    picks.push(bid);
+  }
+  GS.shop = picks.map(bid=>({...makeBatInstance(bid), sold:false, locked:false}));
+}
+
+function rerollShop(){
+  if(GS.gold < 1){addLog('Not enough gold!','hit');return;}
+  if(GS.phase!=='shop') return;
+  GS.gold--;
+  playSFX('sell');
+  GS.shopFrozen=false;
+  generateShop();
+  renderShop();
+  renderTopbar();
+}
+
+function freezeShop(){
+  GS.shopFrozen=!GS.shopFrozen;
+  addLog(GS.shopFrozen?'Shop frozen!':'Shop unfrozen.','passive');
+  renderShop();
+}
+
+function buyBatomon(shopIdx){
+  if(GS.phase!=='shop') return;
+  const item = GS.shop[shopIdx];
+  if(!item||item.sold) return;
+  if(GS.gold < item.cost){addLog('Not enough gold!','hit');return;}
+  const slot = GS.team.findIndex(s=>s===null);
+  if(slot===-1){addLog('Team full! Sell one first.','hit');return;}
+  GS.gold -= item.cost;
+  GS.team[slot] = {...item, sold:false};
+  GS.shop[shopIdx].sold=true;
+  playSFX('buy');
+  addLog(`Bought ${item.name}!`,'win');
+  renderAll();
+}
+
+function sellBatomon(slotIdx){
+  if(!GS.team[slotIdx]) return;
+  const bat = GS.team[slotIdx];
+  GS.gold += 1;
+  GS.team[slotIdx] = null;
+  playSFX('sell');
+  addLog(`Sold ${bat.name} for 1 gold`,'passive');
+  renderAll();
+}
+
+// ===================== SYNERGY LOGIC =====================
+const SYNERGIES = {
+  Fire:{
+    2:{desc:'+2 Atk all Fire',apply:(team)=>{team.forEach(b=>{if(b&&b.type==='Fire')b._atkBonus+=2;})}},
+    3:{desc:'+5 Atk all Fire',apply:(team)=>{team.forEach(b=>{if(b&&b.type==='Fire')b._atkBonus+=5;})}},
+  },
+  Water:{
+    2:{desc:'Water regen 2HP/turn',apply:(team)=>{team.forEach(b=>{if(b&&b.type==='Water')b._regen=(b._regen||0)+2;})}},
+  },
+  Shadow:{
+    2:{desc:'Shadow 20% dodge',apply:(team)=>{team.forEach(b=>{if(b&&b.type==='Shadow')b._dodge=(b._dodge||0)+20;})}},
+  },
+  Light:{
+    2:{desc:'+3 Def all allies',apply:(team)=>{team.forEach(b=>{if(b)b._defBonus=(b._defBonus||0)+3;})}},
+  },
+  Earth:{
+    2:{desc:'+5 maxHP all Earth',apply:(team)=>{team.forEach(b=>{if(b&&b.type==='Earth'){b.maxHp+=5;b.currentHp=Math.min(b.currentHp+5,b.maxHp);}})}},
+  },
+  Wind:{
+    2:{desc:'+2 Spd all Wind',apply:(team)=>{team.forEach(b=>{if(b&&b.type==='Wind')b._spdBonus=(b._spdBonus||0)+2;})}},
+  },
+};
+
+function getActiveSynergies(team){
+  const counts={};
+  team.forEach(b=>{if(b)counts[b.type]=(counts[b.type]||0)+1;});
+  const active=[];
+  for(const [type,count] of Object.entries(counts)){
+    if(SYNERGIES[type]){
+      for(const [needed,data] of Object.entries(SYNERGIES[type]).sort((a,b)=>b[0]-a[0])){
+        if(count>=parseInt(needed)){active.push({type,count,needed:parseInt(needed),desc:data.desc,apply:data.apply});break;}
+      }
+    }
+  }
+  return active;
+}
+
+function applyPreBattleEffects(team){
+  // Reset bonuses
+  team.forEach(b=>{
+    if(!b) return;
+    b._atkBonus=0;b._defBonus=0;b._spdBonus=0;
+    b._shield=false;b._shieldWall=false;b._alwaysFirst=false;
+    b._dodge=0;b._burstFirst=0;b._drainHp=0;b._regen=0;
+    b._burn=0;b._surgeTimer=0;b._aoe=false;b._invuln=0;
+    b._critPierce=false;b._shield5=0;b._doubleTrigger=false;
+    b._chillOnHit=false;b._dmgReduce=0;
+  });
+  // Synergies
+  const syns=getActiveSynergies(team);
+  syns.forEach(s=>s.apply(team));
+  // Trainer
+  if(GS.trainer) GS.trainer.effect(team);
+  // Abilities
+  team.forEach(b=>{
+    if(!b) return;
+    const tmpl=BATOMON_DB[b.templateId];
+    if(tmpl.ability.effect){
+      tmpl.ability.effect(b,team.filter(x=>x),{});
+      if(b._doubleTrigger) tmpl.ability.effect(b,team.filter(x=>x),{});
+    }
+  });
+}
+
+// ===================== BATTLE ENGINE =====================
+let battleLog=[];
+function addLog(msg,cls=''){
+  const el=document.getElementById('battle-log');
+  const div=document.createElement('div');
+  div.className='log-entry '+(cls||'');
+  div.textContent=msg;
+  el.appendChild(div);
+  el.scrollTop=el.scrollHeight;
+  battleLog.push({msg,cls});
+}
+
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+async function startBattle(){
+  if(GS.phase!=='shop'||GS.battleRunning) return;
+  const playerTeam=GS.team.filter(b=>b);
+  if(playerTeam.length===0){addLog('Add some Batomon to your team first!','hit');return;}
+
+  GS.phase='battle';
+  GS.battleRunning=true;
+  document.getElementById('phase-indicator').className='phase-indicator phase-battle';
+  document.getElementById('phase-indicator').textContent='--- BATTLE PHASE: FIGHT! ---';
+  document.getElementById('round-badge').textContent='BATTLE!';
+  document.getElementById('battle-btn').disabled=true;
+
+  // Clone teams for battle
+  const opp=OPPONENTS[Math.min(GS.round-1,OPPONENTS.length-1)];
+  const playerBattle=GS.team.map(b=>b?deepCloneBat(b):null);
+  const enemyBattle=opp.team.map(id=>{
+    const b=makeBatInstance(id,Math.min(3,1+Math.floor(GS.round/3)));
+    return b;
+  });
+
+  // Apply pre-battle effects
+  applyPreBattleEffects(playerBattle);
+  applyPreBattleEffects(enemyBattle);
+  // Restore HP after effects
+  playerBattle.forEach(b=>{if(b){b.currentHp=b.maxHp;}});
+  enemyBattle.forEach(b=>{if(b){b.currentHp=b.maxHp;}});
+  // Apply shield5
+  playerBattle.forEach(b=>{if(b&&b._shield5>0){b.currentHp+=b._shield5;b.maxHp+=b._shield5;}});
+  enemyBattle.forEach(b=>{if(b&&b._shield5>0){b.currentHp+=b._shield5;b.maxHp+=b._shield5;}});
+
+  addLog(`⚔ BATTLE: ${GS.trainer?GS.trainer.name:'You'} vs ${opp.name}!`,'win');
+
+  // Render initial state
+  renderArena(playerBattle, enemyBattle);
+  document.getElementById('vs-display').style.display='block';
+  await sleep(400);
+
+  // Battle loop
+  let turn=0;
+  while(true){
+    const pAlive=playerBattle.filter(b=>b&&b.currentHp>0);
+    const eAlive=enemyBattle.filter(b=>b&&b.currentHp>0);
+    if(pAlive.length===0||eAlive.length===0) break;
+    turn++;
+    addLog(`--- Turn ${turn} ---`);
+
+    // Regen tick
+    [...pAlive,...eAlive].forEach(b=>{
+      if(b._regen>0){b.currentHp=Math.min(b.maxHp,b.currentHp+b._regen);}
+    });
+
+    // Build attack order
+    let attackers=[
+      ...pAlive.map(b=>({bat:b,side:'player',idx:playerBattle.indexOf(b)})),
+      ...eAlive.map(b=>({bat:b,side:'enemy',idx:enemyBattle.indexOf(b)})),
+    ];
+    attackers.sort((a,b)=>{
+      if(a.bat._alwaysFirst&&!b.bat._alwaysFirst) return -1;
+      if(!a.bat._alwaysFirst&&b.bat._alwaysFirst) return 1;
+      return (b.bat.spd+(b.bat._spdBonus||0))-(a.bat.spd+(a.bat._spdBonus||0));
+    });
+
+    for(const {bat,side} of attackers){
+      if(bat.currentHp<=0) continue;
+      const targets=side==='player'?enemyBattle.filter(b=>b&&b.currentHp>0):playerBattle.filter(b=>b&&b.currentHp>0);
+      if(targets.length===0) break;
+
+      // Invuln tick
+      if(bat._invuln>0){bat._invuln--;addLog(`${bat.name} is invulnerable!`,'passive');continue;}
+
+      const target=targets[0];
+      const targetSide=side==='player'?'enemy':'player';
+      const targetIdx=(side==='player'?enemyBattle:playerBattle).indexOf(target);
+
+      // Dodge check
+      if(target._dodge>0&&Math.random()*100<target._dodge){
+        addLog(`${target.name} dodged!`,'passive');
+        playSFX('hit');
+        flashSlot(targetSide,targetIdx,'dodge');
+        await sleep(300);
+        continue;
+      }
+
+      // Shield wall
+      if(target._shieldWall){
+        target._shieldWall=false;
+        addLog(`${target.name} blocked with Shield Wall!`,'passive');
+        flashSlot(targetSide,targetIdx,'shield');
+        await sleep(300);
+        continue;
+      }
+
+      // Shield
+      if(target._shield){
+        target._shield=false;
+        addLog(`${target.name}'s shield absorbed the hit!`,'passive');
+        flashSlot(targetSide,targetIdx,'shield');
+        await sleep(300);
+        continue;
+      }
+
+      // Calc damage
+      let atk=(bat.atk||0)+(bat._atkBonus||0);
+      let def=Math.max(0,(target.def||0)+(target._defBonus||0)-(target._dmgReduce||0));
+      let dmg=Math.max(1,atk-def);
+      const isCrit=Math.random()<0.1;
+      if(isCrit){
+        dmg=bat._critPierce?atk:Math.floor(dmg*1.5);
+        addLog(`${bat.name} CRITICAL HIT!`,'hit');
+      }
+      if(bat._burstFirst>0){dmg+=bat._burstFirst;bat._burstFirst=0;}
+      if(bat._surgeTimer!==undefined){bat._surgeTimer++;if(bat._surgeTimer%2===0)dmg+=6;}
+      if(bat._burn>0&&side==='enemy'){dmg+=bat._burn;}// burn on enemy
+
+      // Apply shield5
+      if(target._shield5>0){
+        const absorbed=Math.min(target._shield5,dmg);
+        target._shield5-=absorbed;dmg-=absorbed;
+        if(absorbed>0)addLog(`Shield absorbed ${absorbed} dmg!`,'passive');
+      }
+
+      target.currentHp=Math.max(0,target.currentHp-dmg);
+      addLog(`${bat.name} → ${target.name}: ${dmg} dmg (HP:${target.currentHp}/${target.maxHp})`,'hit');
+      playSFX('hit');
+
+      // AOE
+      if(bat._aoe){
+        const rest=targets.slice(1);
+        for(const t2 of rest){
+          const d2=Math.max(1,Math.floor(dmg/2));
+          t2.currentHp=Math.max(0,t2.currentHp-d2);
+          addLog(`  Whirlwind: ${t2.name} took ${d2} dmg`,'hit');
+        }
+      }
+
+      // Drain
+      if(bat._drainHp>0){bat.currentHp=Math.min(bat.maxHp,bat.currentHp+bat._drainHp);}
+
+      flashSlot(side,attackers.find(a=>a.bat===bat).idx,'attack');
+      flashSlot(targetSide,targetIdx,'hit');
+      showDamageFloat(targetSide,targetIdx,dmg,isCrit);
+
+      if(target.currentHp<=0){
+        addLog(`${target.name} is KO'd!`,'ko');
+        playSFX('ko');
+        markSlotDead(targetSide,targetIdx);
+      }
+
+      renderArenaHpBars(playerBattle,enemyBattle);
+      await sleep(350);
+    }
+  }
+
+  // Determine winner
+  const pSurv=playerBattle.filter(b=>b&&b.currentHp>0).length;
+  const eSurv=enemyBattle.filter(b=>b&&b.currentHp>0).length;
+  let result;
+  if(pSurv>0&&eSurv===0){result='win';}
+  else if(eSurv>0&&pSurv===0){result='loss';}
+  else{result='draw';}
+
+  if(result==='win'){
+    GS.wins++;
+    const goldReward=3+Math.floor(GS.round/2);
+    GS.gold+=goldReward;
+    addLog(`VICTORY! +${goldReward} gold 🏆`,'win');
+    playSFX('win');
+  } else if(result==='loss'){
+    GS.losses++;
+    GS.lives--;
+    GS.gold+=2;
+    addLog(`DEFEAT! Lost a life. +2 gold`,'ko');
+    playSFX('lose');
+  } else {
+    GS.gold+=2;
+    addLog(`DRAW! +2 gold`,'passive');
+  }
+
+  // Update team HP (keep survivals healed partially)
+  GS.team.forEach((b,i)=>{
+    if(!b) return;
+    const pb=playerBattle[i];
+    if(pb){
+      // Partial heal after battle
+      b.currentHp=Math.max(1,Math.floor(pb.currentHp+(pb.maxHp-pb.currentHp)*0.3));
+      b.maxHp=pb.maxHp;
+    }
+  });
+
+  GS.battleRunning=false;
+  await sleep(600);
+
+  if(GS.lives<=0){
+    endGame(false);
+    return;
+  }
+  if(GS.round>=8){
+    endGame(GS.wins>=4);
+    return;
+  }
+
+  GS.round++;
+  GS.phase='shop';
+  const baseGold=7+Math.floor(GS.round/2);
+  const interest=Math.min(5,Math.floor(GS.gold/10));
+  GS.gold=baseGold+interest;
+  if(!GS.shopFrozen) generateShop();
+  document.getElementById('phase-indicator').className='phase-indicator phase-shop';
+  document.getElementById('phase-indicator').textContent='--- SHOP PHASE: BUY & ARRANGE YOUR TEAM ---';
+  document.getElementById('round-badge').textContent='SHOP';
+  document.getElementById('battle-btn').disabled=false;
+  document.getElementById('vs-display').style.display='none';
+  addLog(`=== Round ${GS.round} begins! Gold: ${GS.gold} ===`,'win');
+  renderAll();
+}
+
+// ===================== RENDERING =====================
+function drawSprite(canvas, batId, size=32){
+  const ctx=canvas.getContext('2d');
+  canvas.width=size;canvas.height=size;
+  ctx.clearRect(0,0,size,size);
+  const name=BATOMON_DB[batId].name;
+  const type=BATOMON_DB[batId].type;
+  let grid=SPRITES[name];
+  const gridSize=grid?Math.sqrt(grid.length):16;
+  if(!grid) grid=generateSprite(name,type);
+  const px=size/gridSize;
+  grid.forEach((col,i)=>{
+    if(!col) return;
+    const x=(i%gridSize)*px;
+    const y=Math.floor(i/gridSize)*px;
+    ctx.fillStyle='#'+col;
+    ctx.fillRect(x,y,px,px);
+  });
+}
+
+function typeColor(type){
+  const map={Fire:'#ff6633',Water:'#33aaff',Earth:'#88aa44',Wind:'#aaffee',Shadow:'#aa44ff',Light:'#ffee44'};
+  return map[type]||'#aaaaaa';
+}
+
+function renderAll(){
+  renderTopbar();
+  renderShop();
+  renderTeam();
+  renderSynergies();
+  renderTrainer();
+  renderOpponentInfo();
+  renderArenaEmpty();
+}
+
+function renderTopbar(){
+  document.getElementById('tb-round').textContent=`${GS.round}/8`;
+  document.getElementById('tb-gold').textContent=GS.gold;
+  document.getElementById('tb-record').textContent=`${GS.wins}W-${GS.losses}L`;
+  document.getElementById('tb-lives').textContent='❤'.repeat(GS.lives)+'🖤'.repeat(Math.max(0,5-GS.lives));
+}
+
+function renderShop(){
+  const grid=document.getElementById('shop-grid');
+  grid.innerHTML='';
+  GS.shop.forEach((bat,i)=>{
+    if(!bat) return;
+    const card=document.createElement('div');
+    card.className='shop-card'+(bat.sold?' sold':'')+(bat.locked?' locked':'');
+    card.onclick=()=>buyBatomon(i);
+
+    const canvas=document.createElement('canvas');
+    drawSprite(canvas,bat.templateId,32);
+    canvas.style.imageRendering='pixelated';
+    card.appendChild(canvas);
+
+    card.innerHTML+=`<div class="sc-cost">${bat.cost}🪙</div>
+      <div class="sc-name">${bat.name}</div>
+      <div class="sc-type" style="color:${typeColor(bat.type)}">${bat.type}</div>
+      <div class="sc-stats">⚔${bat.atk} 🛡${bat.def} ❤${bat.hp} ⚡${bat.spd}</div>
+      <div class="sc-ability">${BATOMON_DB[bat.templateId].ability.name}: ${BATOMON_DB[bat.templateId].ability.desc}</div>
+      <div class="lock-btn" onclick="event.stopPropagation();lockShopItem(${i})">${bat.locked?'🔒':'🔓'}</div>`;
+
+    // Re-add canvas at top
+    const c2=document.createElement('canvas');
+    drawSprite(c2,bat.templateId,32);
+    c2.style.imageRendering='pixelated';
+    card.insertBefore(c2,card.firstChild);
+    card.querySelector('canvas:nth-child(2)').remove();
+
+    grid.appendChild(card);
+  });
+
+  // Interest info
+  const interest=Math.min(5,Math.floor(GS.gold/10));
+  document.getElementById('interest-info').textContent=
+    interest>0?`Interest: +${interest} gold next round (${GS.gold}/10 gold)`:'';
+}
+
+function lockShopItem(i){
+  if(GS.shop[i]) GS.shop[i].locked=!GS.shop[i].locked;
+  renderShop();
+}
+
+function renderTeam(){
+  const slots=document.getElementById('team-slots');
+  slots.innerHTML='';
+  for(let i=0;i<6;i++){
+    const slot=document.createElement('div');
+    const bat=GS.team[i];
+    slot.className='team-slot '+(bat?'occupied':'empty');
+    slot.dataset.idx=i;
+
+    if(bat){
+      const canvas=document.createElement('canvas');
+      drawSprite(canvas,bat.templateId,32);
+      canvas.style.imageRendering='pixelated';
+      slot.appendChild(canvas);
+      slot.innerHTML+=`
+        <div class="ts-lvl">L${bat.level||1}</div>
+        <div class="ts-sell" onclick="event.stopPropagation();sellBatomon(${i})">✕</div>
+        <div class="ts-name">${bat.name}</div>
+        <div class="ts-stats" style="color:${typeColor(bat.type)}">${bat.type}</div>
+        <div class="ts-stats">⚔${bat.atk} 🛡${bat.def}</div>
+        <div class="ts-stats">❤${bat.currentHp}/${bat.maxHp}</div>`;
+      const c2=document.createElement('canvas');
+      drawSprite(c2,bat.templateId,32);
+      c2.style.imageRendering='pixelated';
+      slot.insertBefore(c2,slot.firstChild);
+      slot.querySelector('canvas:nth-child(2)').remove();
+    } else {
+      slot.textContent='+';
+    }
+
+    // Drag and drop
+    slot.draggable=bat?true:false;
+    slot.addEventListener('dragstart',(e)=>{GS.dragSrc=i;e.dataTransfer.effectAllowed='move';});
+    slot.addEventListener('dragover',(e)=>{e.preventDefault();slot.classList.add('drag-over');});
+    slot.addEventListener('dragleave',()=>slot.classList.remove('drag-over'));
+    slot.addEventListener('drop',(e)=>{
+      e.preventDefault();slot.classList.remove('drag-over');
+      if(GS.dragSrc!==null&&GS.dragSrc!==i){
+        const tmp=GS.team[GS.dragSrc];
+        GS.team[GS.dragSrc]=GS.team[i];
+        GS.team[i]=tmp;
+        GS.dragSrc=null;
+        renderTeam();renderSynergies();
+      }
+    });
+
+    slots.appendChild(slot);
+  }
+}
+
+function renderSynergies(){
+  const list=document.getElementById('synergy-list');
+  list.innerHTML='';
+  const syns=getActiveSynergies(GS.team);
+  if(syns.length===0){list.innerHTML='<div style="font-size:6px;color:#555;text-align:center">No synergies yet</div>';return;}
+  syns.forEach(s=>{
+    const div=document.createElement('div');
+    div.className='syn-item';
+    const icon=document.createElement('div');
+    icon.className='syn-icon';
+    icon.style.background=typeColor(s.type);
+    icon.textContent={Fire:'🔥',Water:'💧',Earth:'🌿',Wind:'💨',Shadow:'👁',Light:'✨'}[s.type]||'?';
+    const text=document.createElement('div');
+    text.className='syn-text';
+    text.textContent=s.desc;
+    const count=document.createElement('div');
+    count.className='syn-count';
+    count.textContent=`${s.count}x`;
+    div.appendChild(icon);div.appendChild(text);div.appendChild(count);
+    list.appendChild(div);
+  });
+}
+
+function renderTrainer(){
+  if(!GS.trainer) return;
+  const el=document.getElementById('trainer-display');
+  el.innerHTML=`<div style="font-size:20px;margin-bottom:4px">${GS.trainer.emoji}</div>
+    <div class="trainer-name">${GS.trainer.name}</div>
+    <div class="trainer-effect">${GS.trainer.desc}</div>`;
+}
+
+function renderOpponentInfo(){
+  const opp=OPPONENTS[Math.min(GS.round-1,OPPONENTS.length-1)];
+  const el=document.getElementById('opponent-info');
+  el.innerHTML=`<div style="color:#ff6666;font-size:7px">${opp.name}</div>
+    <div style="font-size:6px;color:#888;margin-top:4px">${opp.team.length} Batomon</div>
+    <div style="font-size:5px;color:#555;margin-top:2px">Diff: ${'★'.repeat(opp.difficulty)}</div>`;
+}
+
+function renderArenaEmpty(){
+  const pRow=document.getElementById('player-row');
+  const eRow=document.getElementById('enemy-row');
+  pRow.innerHTML='';
+  eRow.innerHTML='';
+  const opp=OPPONENTS[Math.min(GS.round-1,OPPONENTS.length-1)];
+  document.getElementById('opponent-label').textContent=opp.name;
+
+  // Show ghost of player team
+  GS.team.forEach((b,i)=>{
+    if(!b) return;
+    const slot=document.createElement('div');
+    slot.className='battle-slot';
+    const canvas=document.createElement('canvas');
+    drawSprite(canvas,b.templateId,28);
+    canvas.style.imageRendering='pixelated';
+    slot.appendChild(canvas);
+    const nm=document.createElement('div');nm.className='bat-name-sm';nm.textContent=b.name;
+    const bar=document.createElement('div');bar.className='bat-hp-bar';
+    const fill=document.createElement('div');fill.className='bat-hp-fill';fill.style.width='100%';
+    bar.appendChild(fill);
+    slot.appendChild(nm);slot.appendChild(bar);
+    pRow.appendChild(slot);
+  });
+
+  // Show ghost opponent
+  opp.team.forEach(id=>{
+    const slot=document.createElement('div');
+    slot.className='battle-slot';slot.style.opacity='0.5';
+    const canvas=document.createElement('canvas');
+    drawSprite(canvas,id,28);
+    canvas.style.imageRendering='pixelated';
+    slot.appendChild(canvas);
+    const nm=document.createElement('div');nm.className='bat-name-sm';nm.textContent=BATOMON_DB[id].name;
+    slot.appendChild(nm);
+    eRow.appendChild(slot);
+  });
+}
+
+function renderArena(playerTeam, enemyTeam){
+  const pRow=document.getElementById('player-row');
+  const eRow=document.getElementById('enemy-row');
+  pRow.innerHTML='';eRow.innerHTML='';
+
+  const makeSlot=(b,side,idx)=>{
+    const slot=document.createElement('div');
+    slot.className='battle-slot';
+    slot.id=`bs-${side}-${idx}`;
+    if(!b||b.currentHp<=0) slot.classList.add('dead-bat');
+
+    const canvas=document.createElement('canvas');
+    if(b) drawSprite(canvas,b.templateId,28);
+    canvas.style.imageRendering='pixelated';
+    slot.appendChild(canvas);
+
+    if(b){
+      const nm=document.createElement('div');nm.className='bat-name-sm';nm.textContent=b.name;
+      slot.appendChild(nm);
+      const bar=document.createElement('div');bar.className='bat-hp-bar';
+      const fill=document.createElement('div');
+      fill.className='bat-hp-fill';
+      fill.id=`hpf-${side}-${idx}`;
+      const pct=Math.max(0,Math.round(b.currentHp/b.maxHp*100));
+      fill.style.width=pct+'%';
+      if(pct<30) fill.classList.add('low');
+      else if(pct<60) fill.classList.add('mid');
+      bar.appendChild(fill);
+      const hpt=document.createElement('div');
+      hpt.className='hp-text-sm';
+      hpt.id=`hpt-${side}-${idx}`;
+      hpt.textContent=`${b.currentHp}`;
+      slot.appendChild(bar);slot.appendChild(hpt);
+    }
+    return slot;
+  };
+
+  enemyTeam.forEach((b,i)=>{eRow.appendChild(makeSlot(b,'enemy',i));});
+  playerTeam.forEach((b,i)=>{pRow.appendChild(makeSlot(b,'player',i));});
+}
+
+function renderArenaHpBars(playerTeam,enemyTeam){
+  [...playerTeam.map((b,i)=>({b,side:'player',i})),...enemyTeam.map((b,i)=>({b,side:'enemy',i}))].forEach(({b,side,i})=>{
+    if(!b) return;
+    const fill=document.getElementById(`hpf-${side}-${i}`);
+    const hpt=document.getElementById(`hpt-${side}-${i}`);
+    if(fill){
+      const pct=Math.max(0,Math.round(b.currentHp/b.maxHp*100));
+      fill.style.width=pct+'%';
+      fill.className='bat-hp-fill'+(pct<30?' low':pct<60?' mid':'');
+    }
+    if(hpt) hpt.textContent=b.currentHp;
+  });
+}
+
+function flashSlot(side,idx,type){
+  const slot=document.getElementById(`bs-${side}-${idx}`);
+  if(!slot) return;
+  slot.classList.remove('shake','flash-hit');
+  void slot.offsetWidth;
+  if(type==='hit'||type==='dodge') slot.classList.add('flash-hit');
+  else if(type==='attack') slot.classList.add('shake');
+}
+
+function markSlotDead(side,idx){
+  const slot=document.getElementById(`bs-${side}-${idx}`);
+  if(slot) slot.classList.add('dead-bat');
+}
+
+function showDamageFloat(side,idx,dmg,crit){
+  const slot=document.getElementById(`bs-${side}-${idx}`);
+  if(!slot) return;
+  const el=document.createElement('div');
+  el.className='dmg-float';
+  el.textContent=(crit?'CRIT! ':'')+dmg;
+  if(crit) el.style.color='#ffaa00';
+  slot.style.position='relative';
+  slot.appendChild(el);
+  setTimeout(()=>el.remove(),800);
+}
+
+function endGame(won){
+  const screen=document.getElementById('results-screen');
+  screen.style.display='flex';
+  const title=document.getElementById('result-title');
+  const stats=document.getElementById('result-stats');
+  title.textContent=won?'🏆 CHAMPION!':'💀 GAME OVER';
+  title.style.color=won?'#ffe066':'#ff4444';
+  stats.innerHTML=`Wins: ${GS.wins} / Losses: ${GS.losses}<br>Rounds: ${GS.round}/8<br>Trainer: ${GS.trainer?GS.trainer.name:'None'}`;
+}
+
+// ===================== TRAINER SELECT =====================
+function buildTrainerSelect(){
+  const container=document.getElementById('trainer-select');
+  TRAINERS.forEach(t=>{
+    const card=document.createElement('div');
+    card.className='trainer-card';
+    card.innerHTML=`<span class="tc-emoji">${t.emoji}</span><div class="tc-name">${t.name}</div><div class="tc-desc">${t.desc}</div>`;
+    card.onclick=()=>{
+      document.querySelectorAll('.trainer-card').forEach(c=>c.classList.remove('selected'));
+      card.classList.add('selected');
+      GS.trainer=t;
+      document.getElementById('start-btn').disabled=false;
+    };
+    container.appendChild(card);
+  });
+}
+
+function startGame(){
+  if(!GS.trainer) return;
+  document.getElementById('start-screen').style.display='none';
+  generateShop();
+  renderAll();
+  addLog('Welcome to Batomon Showdown! Buy Batomon and fight!','win');
+}
+
+// ===================== INIT =====================
+buildTrainerSelect();
+renderAll();
+</script>
+</body>
+</html>
